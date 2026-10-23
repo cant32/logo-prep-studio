@@ -1,0 +1,14 @@
+# Railway sets PORT; 8080 is the fallback for local runs.
+:{$PORT:8080} {
+	root * /srv
+	encode zstd gzip
+	file_server
+
+	# models, fonts and libraries rarely change: let browsers keep them a week
+	@static path /vendor/* /fonts/* /css/*
+	header @static Cache-Control "public, max-age=604800"
+
+	# don't serve repo and build files
+	@private path /Dockerfile /Caddyfile /tools/* /serve.ps1 /*.bat /*.command /.git*
+	respond @private 404
+}

@@ -1,0 +1,7 @@
+.git
+.gitignore
+.claude
+tools
+serve.ps1
+*.bat
+*.command

@@ -6,7 +6,9 @@ import { parse } from '../vendor/opentype.module.js';
 import { assetUrl } from './assets.js';
 
 export const FONTS = [
-  { name: 'Brand Rounded', weights: { Regular: 'm-plus-rounded-1c-latin-400-normal.woff', Medium: 'm-plus-rounded-1c-latin-500-normal.woff', Bold: 'm-plus-rounded-1c-latin-700-normal.woff', ExtraBold: 'm-plus-rounded-1c-latin-800-normal.woff' } },
+  // the house faces, from the Stacked design system (vendor/stacked-ds/fonts)
+  { name: 'Gotham Rounded', weights: { Light: 'ds:GothamRounded-Light.otf', Book: 'ds:GothamRounded-Book.otf', Medium: 'ds:GothamRounded-Medium.otf', Bold: 'ds:GothamRounded-Bold.otf', 'Book Italic': 'ds:GothamRounded-BookItalic.otf', 'Bold Italic': 'ds:GothamRounded-BoldItalic.otf' } },
+  { name: 'Gotham', weights: { Light: 'ds:Gotham-Light.otf', Book: 'ds:Gotham-Book.otf', Medium: 'ds:Gotham-Medium.otf', Bold: 'ds:Gotham-Bold.otf', Black: 'ds:Gotham-Black.otf', 'Light Italic': 'ds:Gotham-LightItalic.otf', 'Black Italic': 'ds:Gotham-BlackItalic.otf' } },
   { name: 'Inter', weights: { Regular: 'inter-latin-400-normal.woff', Bold: 'inter-latin-700-normal.woff', Black: 'inter-latin-900-normal.woff' } },
   { name: 'Montserrat', weights: { Regular: 'montserrat-latin-400-normal.woff', Bold: 'montserrat-latin-700-normal.woff', ExtraBold: 'montserrat-latin-800-normal.woff' } },
   { name: 'Oswald', weights: { Medium: 'oswald-latin-500-normal.woff', Bold: 'oswald-latin-700-normal.woff' } },
@@ -22,7 +24,8 @@ export const FONTS = [
 const loaded = new Map();
 export async function loadFont(file) {
   if (!loaded.has(file)) {
-    loaded.set(file, fetch(assetUrl(`fonts/${file}`)).then(r => r.arrayBuffer()).then(parse));
+    const path = file.startsWith('ds:') ? `vendor/stacked-ds/fonts/${file.slice(3)}` : `fonts/${file}`;
+    loaded.set(file, fetch(assetUrl(path)).then(r => r.arrayBuffer()).then(parse));
   }
   return loaded.get(file);
 }

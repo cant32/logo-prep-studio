@@ -1,0 +1,367 @@
+/* Stacked components. Load tokens.css first.
+   From the Stacked Arcade phone and wall screens, plus the brand cheat sheet (CMYK v1 2025). */
+
+/* ---------- Base ---------- */
+.stk {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-wrap: break-word;
+}
+/* Wrapping for every piece of text, however it's styled: headings balance across their lines,
+   running text never leaves a single word on its last line. */
+.stk :is(h1, h2, h3, h4, h5, h6) { text-wrap: balance; }
+.stk :is(p, li, figcaption, dd, td, th, blockquote) { text-wrap: balance; }
+/* Long-form copy (more than six lines) can't balance; it falls back to pretty so the last line is never one word */
+.stk .stk-longform { text-wrap: pretty; }
+
+/* ---------- Headings: Gotham Round Bold, tracked capitals ---------- */
+.stk-display { font-weight: 700; text-transform: uppercase; letter-spacing: var(--tracking-display); line-height: var(--leading-display); margin: 0; text-wrap: balance; }
+.stk-display .light { font-weight: 400; }
+/* Section heading: orange tracked capitals, then a rule out to the edge ("LOGOTYPE ———") */
+.stk-section {
+  display: flex; align-items: center; gap: 0.8em;
+  margin: 0; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em;
+}
+.stk-section::after { content: ''; flex: 1; height: 2px; background: var(--accent); border-radius: 2px; }
+/* Heading with an orange rule under it (the values slides, the phone labels) */
+.stk-ruled {
+  margin: 0; padding-bottom: 0;
+  font-weight: 700; text-transform: uppercase; letter-spacing: var(--tracking-label);
+}
+.stk-ruled::after { content: ''; display: block; height: 3px; margin-top: 0.45em; border-radius: 3px; background: var(--accent); }
+/* Body copy: Gotham Book, never bold, with generous tracking */
+.stk-body { font-weight: 400; letter-spacing: var(--tracking-body); line-height: var(--leading-body); margin: 0; max-width: var(--measure); text-wrap: balance; }
+.stk-note { font-size: var(--text-sm); color: var(--muted); margin: 0; line-height: var(--leading-body); max-width: var(--measure); text-wrap: pretty; }
+.stk-pixel { font-family: var(--font-pixel); font-weight: normal; letter-spacing: 0; line-height: 1.3; }
+
+/* ---------- Buttons ---------- */
+.stk-btn {
+  font-family: inherit; font-weight: 700; font-size: var(--text-lg);
+  letter-spacing: var(--tracking-button); text-indent: var(--tracking-button);
+  border-radius: var(--radius-pill); padding: 16px 28px;
+  border: var(--border) solid var(--accent); cursor: pointer;
+  transition: transform 0.08s;
+}
+.stk-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.stk-btn.primary { background: var(--accent); color: var(--ink); }
+.stk-btn.primary:active { transform: scale(0.97); }
+.stk-btn.outline { background: transparent; color: var(--accent); }
+.stk-btn.ghost { background: transparent; color: var(--muted); border-color: var(--line-strong); }
+.stk-btn.small { font-size: var(--text-sm); padding: 10px 18px; }
+.stk-btn.huge { font-size: var(--text-2xl); padding: 30px 40px; }
+.stk-btn[disabled] { opacity: 0.5; cursor: default; }
+.stk-btn .sub { display: block; font-size: 12px; letter-spacing: 0.06em; margin-top: 4px; opacity: 0.85; }
+/* Arcade key: chunky orange with a 3D edge */
+.stk-key {
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-xl); background: var(--accent); color: var(--ink);
+  font-weight: 700; letter-spacing: 0.12em; box-shadow: 0 6px 0 var(--stacked-orange-deep);
+  transition: transform 0.05s, box-shadow 0.05s;
+}
+.stk-key.on { background: var(--stacked-orange-light); transform: translateY(4px); box-shadow: 0 2px 0 var(--stacked-orange-deep); }
+
+/* ---------- Pills ---------- */
+.stk-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px 4px 8px; border-radius: var(--radius-pill);
+  border: 2px solid var(--accent); background: rgba(255, 119, 18, 0.16);
+  color: var(--text); font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.04em; white-space: nowrap;
+}
+.stk-chip {
+  display: inline-block; padding: 6px 14px; border-radius: var(--radius-pill);
+  background: var(--accent); color: var(--ink); font-weight: 700; font-size: var(--text-sm); letter-spacing: 0.04em;
+}
+.stk-chip.teal { background: var(--stacked-teal); }
+.stk-chip.champ { font-family: var(--font-pixel); font-weight: normal; font-size: 13px; letter-spacing: 0; padding: 8px 16px; box-shadow: 0 0 0 8px rgba(255, 119, 18, 0.25); }
+.stk-tag { font-size: 11px; padding: 2px 6px; border-radius: 6px; background: rgba(255, 255, 255, 0.12); letter-spacing: 0.06em; font-weight: 700; }
+
+/* ---------- Choice cards (game picker, 1 or 2 players) ---------- */
+.stk-pick {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  padding: 10px 8px; border-radius: var(--radius-lg);
+  border: var(--border) solid var(--line); background: var(--panel); color: var(--muted);
+  font-family: var(--font-pixel); font-size: 10px; line-height: 1.3; cursor: pointer;
+}
+.stk-pick.on { border-color: var(--accent); color: var(--text); background: var(--accent-tint); }
+
+/* ---------- Inputs ---------- */
+.stk-initials {
+  font-family: inherit; font-size: 40px; font-weight: 700;
+  letter-spacing: 0.2em; text-indent: 0.2em; text-align: center; text-transform: uppercase;
+  color: var(--text); background: var(--panel);
+  border: var(--border) solid var(--accent); border-radius: var(--radius-lg); padding: 8px 0; outline: none;
+}
+.stk-initials:focus { box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.55); }
+.stk-initials::placeholder { color: rgba(255, 255, 255, 0.4); }
+.stk-select {
+  font-family: inherit; font-weight: 700; font-size: var(--text-sm); letter-spacing: 0.04em;
+  color: var(--text); background: var(--panel);
+  border: var(--border) solid var(--line-strong); border-radius: var(--radius-lg);
+  padding: 0 12px; -webkit-appearance: none; appearance: none; text-align: center;
+}
+.stk-select.chosen { border-color: var(--accent); }
+.stk-error { color: var(--error); font-size: 14px; margin: 0; }
+
+/* ---------- Panels ---------- */
+.stk-panel { background: var(--panel); border-radius: var(--radius-lg); padding: 10px 16px; color: var(--muted); }
+.stk-panel b { color: var(--text); }
+.stk-hud {
+  display: flex; justify-content: space-between; align-items: center; gap: 4px 8px;
+  background: var(--panel); border-radius: var(--radius-md); padding: 10px 14px;
+  font-size: var(--text-xs); font-weight: 700; color: var(--muted);
+}
+.stk-hud b { color: var(--text); }
+/* QR code frame on the wall: white, orange border, glowing */
+.stk-qr {
+  background: #fff; padding: 5%; line-height: 0;
+  border: 5px solid var(--accent); border-radius: var(--radius-lg);
+  box-shadow: 0 0 30px rgba(255, 119, 18, 0.75);
+}
+
+/* ---------- Feedback ---------- */
+.stk-toast {
+  padding: 12px 16px; border-radius: var(--radius-lg);
+  background: var(--surface); border: 2px solid var(--accent); color: var(--text);
+  font-size: var(--text-md); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+}
+.stk-netpill {
+  position: relative; display: inline-block; padding: 8px 16px 8px 34px; border-radius: var(--radius-pill);
+  background: var(--surface); border: 2px solid var(--accent); color: var(--text);
+  font-size: var(--text-sm); font-weight: 700; letter-spacing: 0.04em; white-space: nowrap;
+}
+.stk-netpill::before {
+  content: ''; position: absolute; left: 13px; top: 50%; width: 10px; height: 10px; margin-top: -5px;
+  border-radius: 50%; background: var(--accent); animation: stk-blink 0.8s steps(1) infinite;
+}
+@keyframes stk-blink { 50% { opacity: 0.2; } }
+
+/* ---------- The five bars from the logo ---------- */
+.stk-bars { display: flex; flex-direction: column; gap: 6px; width: 56px; }
+.stk-bars i { display: block; height: 8px; border-radius: 8px; background: var(--accent); }
+/* Queue meter: lights up from the bottom as your turn gets closer */
+.stk-bars.meter { flex-direction: column-reverse; }
+.stk-bars.meter i { background: rgba(255, 255, 255, 0.12); }
+.stk-bars.meter i.lit { background: var(--accent); }
+
+/* ---------- Brand shapes ---------- */
+.stk-drop { border-radius: var(--shape-drop); }
+/* The big corner arc: a circle cut off by the right-hand edge */
+.stk-arc { position: absolute; border-radius: 50%; background: var(--accent); pointer-events: none; }
+
+/* ---------- Motion ---------- */
+@keyframes stk-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes stk-pop { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: none; } }
+@keyframes stk-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 119, 18, 0.6); }
+  50% { transform: scale(1.04); box-shadow: 0 0 0 18px rgba(255, 119, 18, 0); }
+}
+.stk-pulse { animation: stk-pulse 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .stk-pulse, .stk-netpill::before { animation: none; }
+}
+
+/* =====================================================================
+   Marketing patterns: slides, flyers and lead magnets (pitch deck Q1 2026, IT/AV/WPS flyers)
+   ===================================================================== */
+
+/* Big headline: sentence case, Gotham Round Book, tracked, with the key phrase in Bold */
+.stk-headline { margin: 0; font-weight: 400; letter-spacing: 0.01em; line-height: var(--leading-heading); text-wrap: balance; }
+.stk-headline b, .stk-headline strong { font-weight: 700; }
+/* Kicker above or below a headline: orange tracked capitals in Book */
+.stk-kicker { margin: 0; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 400; line-height: var(--leading-snug); text-wrap: balance; }
+
+/* Right-aligned heading with the orange rule leading in ("———— WHO WE ARE?") */
+.stk-section.lead-in { flex-direction: row-reverse; color: var(--text); font-weight: 400; letter-spacing: 0.06em; }
+
+/* Division lockup: the wordmark and the division name in small tracked Gotham Medium capitals */
+.stk-lockup { display: inline-flex; align-items: flex-end; gap: 0.35em; color: #fff; line-height: 1; }
+.stk-lockup img, .stk-lockup svg { height: 1em; width: auto; display: block; }
+.stk-lockup span { font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.42em; padding-bottom: 0.02em; }
+.stk-division-name { margin: 0.35em 0 0; color: var(--accent); letter-spacing: 0.02em; line-height: var(--leading-snug); }
+
+/* Stat sphere: orange circle, big bold number, label curved or under it. Gold is an optional variant. */
+.stk-stat {
+  width: 130px; aspect-ratio: 1; border-radius: 50%; background: var(--accent);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+  color: var(--ink); padding: 14px;
+}
+.stk-stat b { display: block; font-size: 34px; line-height: 1; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.stk-stat small { font-size: 11px; line-height: var(--leading-snug); margin-top: 4px; letter-spacing: 0.01em; text-wrap: balance; }
+.stk-stat.slice { background: conic-gradient(var(--stacked-orange-deep) 0 var(--slice, 12%), var(--accent) 0); }
+.stk-stat.gold { background: var(--stacked-gold); }
+.stk-stat.gold.slice { background: conic-gradient(var(--accent) 0 var(--slice, 12%), var(--stacked-gold) 0); }
+
+/* Numbered step with a dashed orange connector (the WPS user guide) */
+.stk-step { border: 2.5px dotted var(--accent); border-radius: var(--radius-xl); padding: 16px 20px; position: relative; line-height: var(--leading-snug); text-wrap: pretty; }
+.stk-step .n { position: absolute; top: -0.75em; right: 18px; background: var(--bg); padding: 0 6px; color: var(--accent); font-weight: 700; }
+
+/* Timeline: dashed orange line, orange nodes, orange years */
+.stk-timeline { display: flex; background: var(--dash-line) top left / 10px 2px repeat-x; padding-top: 18px; gap: 20px; position: relative; }
+.stk-timeline > div { position: relative; flex: 1; font-size: 13px; color: var(--muted); line-height: var(--leading-snug); text-wrap: pretty; }
+.stk-timeline > div::before { content: ''; position: absolute; top: -26px; left: 0; width: 14px; height: 14px; border-radius: 3px; background: var(--accent); }
+.stk-timeline b { display: block; color: var(--accent); font-size: 20px; font-weight: 500; }
+
+/* Bullets for slide body copy: Book, generous tracking */
+.stk-list { margin: 0; padding: 0; list-style: none; }
+.stk-list li { position: relative; padding-left: 1em; margin: 0 0 0.5em; letter-spacing: var(--tracking-body); line-height: var(--leading-snug); text-wrap: balance; }
+.stk-list li::before { content: '•'; position: absolute; left: 0; }
+
+/* Contact footer on flyers */
+.stk-contact { display: flex; gap: 18px; align-items: flex-start; font-size: 13px; line-height: 1.6; }
+.stk-contact ul { list-style: none; margin: 0; padding: 0; font-weight: 700; }
+.stk-contact address { position: relative; font-style: normal; padding-left: 14px; }
+.stk-contact address::before { content: ''; position: absolute; left: 0; top: 0.2em; bottom: 0.2em; width: 2px; border-radius: 2px; background: currentColor; }
+
+/* =====================================================================
+   2026 patterns: AV and AV Events pages, social posts, service stats, promos and print
+   ===================================================================== */
+
+/* Standard Gotham: brochures, programmes, AV and AV Events artwork, campaign lines */
+.stk-gotham { font-family: var(--font-gotham); }
+
+/* Split headline (AV brochure): tracked capitals, one line light and white, the next bold and orange */
+.stk-split { margin: 0; font-family: var(--font-gotham); text-transform: uppercase; letter-spacing: var(--tracking-display); line-height: var(--leading-heading); font-weight: 400; text-wrap: balance; }
+.stk-split b, .stk-split strong { display: block; font-weight: 700; color: var(--accent); }
+.stk-split .inline { display: inline; }
+
+/* AV section heading: orange tracked capitals in Book, with a short orange rule underneath */
+.stk-av-heading {
+  width: fit-content; max-width: 100%; margin: 0; font-family: var(--font-gotham); font-weight: 400; text-transform: uppercase;
+  letter-spacing: 0.08em; line-height: var(--leading-heading); color: var(--accent); text-wrap: balance;
+}
+.stk-av-heading::after { content: ''; display: block; width: 100%; height: 3px; margin-top: 0.45em; background: var(--accent); border-radius: 3px; }
+/* AV body copy: wide tracking, generous leading */
+.stk-av-body { margin: 0; font-family: var(--font-gotham); font-weight: 400; letter-spacing: 0.04em; line-height: var(--leading-body); max-width: var(--measure-narrow); text-wrap: balance; }
+.stk-av-body b { display: block; margin-bottom: 0.2em; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+
+/* Photo frame: big rounded corners; .flat-left lets a photo bleed off the left edge */
+.stk-photo { border-radius: var(--radius-photo); overflow: hidden; background: var(--av-night-raised) center / cover no-repeat; }
+.stk-photo.flat-left { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+/* Halftone dot texture laid over dark photo pages */
+.stk-halftone { background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.4px); background-size: 6px 6px; }
+
+/* Name pill for profile posts: light grey pill with a hard shadow, name in Medium, role in Book */
+.stk-namepill {
+  display: inline-block; padding: 0.5em 1.4em 0.55em; border-radius: var(--radius-pill);
+  background: #E4E4E4; color: #4D4D4D; box-shadow: 0.25em 0.25em 0 #8C8C8C; line-height: 1.3;
+}
+.stk-namepill b { display: block; font-weight: 500; font-size: 1.35em; letter-spacing: 0.04em; }
+.stk-namepill span { letter-spacing: 0.04em; }
+.stk-namepill strong { font-weight: 700; }
+
+
+/* Framework tiles (BANTC): rounded column, giant white letter, bold label, question underneath */
+.stk-tiles { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 0.6em; }
+.stk-tile { display: grid; grid-template-rows: auto auto; gap: 0.6em; color: #fff; }
+.stk-tile > div { background: var(--tile, var(--bantc-1)); padding: 0.2em 0.6em 0.4em; }
+.stk-tile > div:first-child { border-radius: 1.4em 1.4em 0 0; }
+.stk-tile > div:last-child { display: flex; align-items: center; min-height: 4.6em; padding: 0.6em 0.9em; font-size: 0.85em; letter-spacing: 0.01em; line-height: var(--leading-snug); text-wrap: balance; }
+.stk-tiles > .stk-tile:first-child > div:last-child { border-bottom-left-radius: 1.4em; }
+.stk-tiles > .stk-tile:last-child > div:last-child { border-bottom-right-radius: 1.4em; }
+.stk-tile .letter { display: block; font-weight: 700; font-size: 6em; line-height: 1; }
+.stk-tile .label { display: block; margin-top: 0.15em; font-weight: 700; font-size: 1.4em; letter-spacing: 0.02em; }
+
+/* Ring gauge: a percentage in a filled circle with a part ring around it (Closed Same Day) */
+.stk-ring {
+  --ring: var(--accent); --fill: var(--stacked-orange-deep); --pct: 76;
+  width: 9em; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; position: relative;
+  background: conic-gradient(var(--ring) 0 calc(var(--pct) * 1%), #fff 0 calc(var(--pct) * 1% + 1%), transparent 0);
+}
+.stk-ring::before { content: ''; position: absolute; inset: 0.55em; border-radius: 50%; background: var(--ring-bg, var(--service-slate)); }
+.stk-ring b { position: relative; width: 74%; aspect-ratio: 1; border-radius: 50%; background: var(--fill); display: grid; place-items: center; color: #fff; font-size: 2em; }
+
+/* Ruler card: rounded stat card with tick marks down the left edge and a wavy lower half */
+.stk-ruler {
+  --card: var(--service-blue); --low: var(--service-blue-light);
+  position: relative; border-radius: 1.6em; padding: 1.2em 1.2em 1.4em 2.6em; color: #fff; overflow: hidden;
+  background: linear-gradient(176deg, var(--card) 0 62%, var(--low) 62.5%);
+}
+.stk-ruler::before {
+  content: '10 -\A 20 -\A 30 -\A 40 -\A 50 -\A 60 -\A 70 -\A 80 -\A 90 -'; white-space: pre;
+  position: absolute; left: 0.7em; top: 1.2em; font-size: 0.42em; line-height: 2.3; letter-spacing: 0.04em; opacity: 0.9;
+}
+.stk-ruler.orange { --card: var(--stacked-orange-deep); --low: var(--accent); }
+.stk-ruler big { display: block; margin-bottom: 0.12em; font-weight: 700; font-size: 2.6em; line-height: 1; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+
+/* Vertical label running up the side of a stats panel (FIX RATES, TICKET STATS) */
+.stk-vlabel { writing-mode: vertical-rl; transform: rotate(180deg); margin: 0; font-weight: 700; letter-spacing: 0.04em; line-height: 1; }
+.stk-vlabel.down { transform: none; }
+
+/* QR "scan me" frame: orange rounded frame with the S mark in the middle, pill tab underneath */
+.stk-scanme { display: inline-flex; flex-direction: column; align-items: stretch; gap: 0.35em; width: 10em; }
+.stk-scanme .code { position: relative; aspect-ratio: 1; background: #fff; border: 0.5em solid var(--accent); border-radius: 1.2em; display: grid; place-items: center; }
+.stk-scanme .code img { width: 32%; }
+.stk-scanme .tab { background: var(--accent); color: #fff; border-radius: var(--radius-pill); padding: 0.35em 0.9em; font-weight: 500; font-size: 1.15em; letter-spacing: 0.04em; }
+
+/* Speech panel (Find Sam): grey pill, rounded on the left, light italic with one bold word */
+.stk-speech {
+  margin: 0; background: var(--stacked-grey); color: #fff; padding: 0.7em 2.4em 0.75em 1.6em;
+  border-radius: 999px 0 0 999px; font-family: var(--font-gotham); font-weight: 300; font-style: italic;
+  line-height: 1.3; letter-spacing: 0; text-wrap: balance;
+}
+.stk-speech b, .stk-speech strong { font-family: var(--font-ui); font-weight: 700; }
+
+/* Pill heading (WPS product sheets): white Bold on an orange pill; .label is the small grey version */
+.stk-pillhead { display: inline-block; margin: 0; padding: 0.2em 0.75em 0.25em; line-height: 1.2; border-radius: var(--radius-pill); background: var(--accent); color: #fff; font-weight: 700; letter-spacing: 0.02em; }
+.stk-pillhead.label { background: #8C8C8C; color: #fff; font-weight: 400; font-size: 0.62em; padding: 0.2em 0.8em; }
+
+/* Numbered drop: big white number on an orange drop, cut off by the top-left corner */
+.stk-numdrop { width: 2.2em; height: 2.2em; border-radius: 0 0 50% 0; background: var(--accent); color: #fff; font-weight: 700; font-style: italic; display: grid; place-items: center; line-height: 1; }
+
+/* Orange pill call to action with tracked capitals (Learn more, Book now) */
+.stk-cta { display: inline-block; line-height: 1.2; white-space: nowrap; padding: 0.4em 1.3em 0.45em; border-radius: var(--radius-pill); background: var(--accent); color: #fff; font-family: var(--font-gotham); font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* Dashed step path (AV Events "Our approach" / "Timeline"): numbered orange steps joined by a dashed line */
+.stk-path { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--dash-line) top left / 10px 2px repeat-x; padding-top: 0.8em; gap: 1em; }
+.stk-path > div { position: relative; font-family: var(--font-gotham); font-size: 0.72em; letter-spacing: 0.06em; line-height: var(--leading-snug); text-transform: uppercase; font-weight: 700; text-wrap: balance; }
+.stk-path > div::before { content: ''; position: absolute; top: calc(-0.8em / 0.72 - 6px); left: 0; width: 10px; height: 10px; border-radius: 2px; background: var(--accent); }
+.stk-path b { display: block; color: var(--accent); font-size: 1.6em; margin-bottom: 0.15em; }
+
+/* Divider lockup: anything | anything, with the same gap on both sides of the rule.
+   Used for logo | headline (banners), S icon | sub-brand, stacked | partner. Set --gap to change both sides at once. */
+.stk-divided { display: flex; align-items: center; gap: var(--gap, var(--space-4)); }
+.stk-divided > hr { flex: none; align-self: stretch; width: 2px; margin: 0; border: 0; border-radius: 2px; background: currentColor; }
+
+/* =====================================================================
+   Grid: every artboard is a modular grid (margin, columns, rows, gutter) and everything sits on it
+   ===================================================================== */
+.stk-grid {
+  --cols: 5; --rows: 6; --gutter: 24px; --margin: 80px;
+  position: relative; box-sizing: border-box; overflow: hidden;
+  display: grid; padding: var(--margin-y, var(--margin)) var(--margin);
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows), minmax(0, 1fr));
+  gap: var(--gutter);
+}
+.stk-grid > * { min-width: 0; }
+.stk-grid.slide  { --cols: var(--grid-slide-cols);  --rows: var(--grid-slide-rows);  --gutter: var(--grid-slide-gutter);  --margin: var(--grid-slide-margin);  width: 1280px; height: 720px; }
+.stk-grid.a4     { --cols: var(--grid-a4-cols);     --rows: var(--grid-a4-rows);     --gutter: var(--grid-a4-gutter);     --margin: var(--grid-a4-margin); --margin-y: var(--grid-a4-margin-y);     width: 595px;  height: 842px; }
+.stk-grid.a5     { --cols: var(--grid-a5-cols);     --rows: var(--grid-a5-rows);     --gutter: var(--grid-a5-gutter);     --margin: var(--grid-a5-margin);     width: 597px;  height: 425px; }
+.stk-grid.square { --cols: var(--grid-square-cols); --rows: var(--grid-square-rows); --gutter: var(--grid-square-gutter); --margin: var(--grid-square-margin); width: 400px;  height: 400px; }
+.stk-grid.tall   { --cols: var(--grid-tall-cols);   --rows: var(--grid-tall-rows);   --gutter: var(--grid-tall-gutter);   --margin: var(--grid-tall-margin);   width: 460px;  height: 820px; }
+.stk-grid.banner { --cols: var(--grid-banner-cols); --rows: 1; --gutter: var(--grid-banner-gutter); --margin: var(--grid-banner-margin); }
+.stk-grid.card   { --cols: var(--grid-card-cols);   --rows: var(--grid-card-rows);   --gutter: var(--grid-card-gutter);   --margin: var(--grid-card-margin);   aspect-ratio: 1.586; }
+/* Decorative shapes sit outside the grid and may bleed; they never carry text and always paint underneath the content */
+.stk-grid > .bleed { position: absolute; pointer-events: none; z-index: 0; }
+.stk-grid > :not(.bleed) { position: relative; z-index: 1; }
+/* Content blocks sit at the top of their cells unless told otherwise */
+.stk-grid > .end { align-self: end; }
+.stk-grid > .center-y { align-self: center; }
+/* Overlay: add #grid to a card's URL to see its columns, rows and margins */
+.stk-grid.show-grid::after {
+  content: ''; position: absolute; inset: var(--margin-y, var(--margin)) var(--margin); pointer-events: none; z-index: 99;
+  --col: calc((100% - (var(--cols) - 1) * var(--gutter)) / var(--cols));
+  --row: calc((100% - (var(--rows) - 1) * var(--gutter)) / var(--rows));
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 190, 255, 0.16) 0 var(--col), transparent 0 calc(var(--col) + var(--gutter))),
+    repeating-linear-gradient(180deg, rgba(0, 190, 255, 0.12) 0 var(--row), transparent 0 calc(var(--row) + var(--gutter)));
+  outline: 1px solid rgba(0, 190, 255, 0.6);
+}
+/* Tabs and panels that run to the page edge while their text stays on the grid */
+.stk-grid > .bleed-l { margin-left: calc(var(--margin) * -1); padding-left: var(--margin); }
+.stk-grid > .bleed-r { margin-right: calc(var(--margin) * -1); padding-right: var(--margin); }
+/* A block that lays its own children on the page's columns (team tables, step paths) */
+.stk-grid > .sub { display: grid; grid-template-columns: subgrid; column-gap: var(--gutter); }

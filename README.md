@@ -72,4 +72,6 @@ Everything runs from this folder, with no internet needed once it's loaded:
 
 ## Brand
 
-The interface uses the stacked group palette (from the 2025 brand cheat sheet: Pantone 158C orange `#E87928`, 426C dark grey `#24272C`, 10C grey `#63666F`, 4008C `#F4AF23`, accent `#51BFD2`). The brand typeface, Gotham Rounded, is licensed and isn't bundled; the interface uses M PLUS Rounded 1c, a free rounded geometric stand-in. To use real Gotham Rounded in the interface, add the licensed `.woff2` files to `fonts/` and point the `@font-face` rules at the top of `css/app.css` to them.
+The interface follows the **Stacked design system** (Claude Design project exported to https://claude.ai/artifact/CCeQ6suRj9H6hEjiHDUSz2). Its own files are in `vendor/stacked-ds/`, unchanged: `tokens.css` (colours, type, spacing, radii), `components.css` (the `stk-` classes the app uses: buttons, section headings, toast, arcs, the drop shape), the Gotham Rounded and Gotham fonts, the 2026 **stacked MERCH** lockup and the S favicon. `css/app.css` only lays the tool out on top of them. To update the look, copy newer `tokens.css`/`components.css` from the design system into `vendor/stacked-ds/` and rebuild the single file.
+
+The Text tool offers Gotham Rounded and Gotham from the same files, so merch text can be set in the house faces.

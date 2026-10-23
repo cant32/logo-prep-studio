@@ -23,6 +23,9 @@ if bundle.returncode: sys.exit(bundle.stderr)
 assets = {f'fonts/{f}': ('font/woff', b64(f'fonts/{f}')) for f in sorted(os.listdir(os.path.join(ROOT, 'fonts'))) if f.endswith('.woff')}
 assets['vendor/vtracer/vtracer.wasm'] = ('application/wasm', b64('vendor/vtracer/vtracer.wasm'))
 assets['vendor/pdfjs/pdf.worker.min.js'] = ('text/javascript', b64('vendor/pdfjs/pdf.worker.min.js'))
+for f in sorted(os.listdir(os.path.join(ROOT, 'vendor/stacked-ds/fonts'))):
+    if f.endswith('.otf'):   # Gotham faces for the text tool
+        assets[f'vendor/stacked-ds/fonts/{f}'] = ('font/otf', b64(f'vendor/stacked-ds/fonts/{f}'))
 
 models = {}
 for kind in ('realcugan', 'realesrgan'):
@@ -41,10 +44,17 @@ boot = ('(function(){var a=%s,m={};for(var k in a){var s=atob(a[k][1]),u=new Uin
         % (json.dumps(assets), json.dumps(models, separators=(',', ':'))))
 
 css = read('css/app.css')
-css = re.sub(r'url\(\.\./fonts/([^)]+\.woff2)\)', lambda m: f'url(data:font/woff2;base64,{b64("fonts/" + m.group(1))})', css)
+css = re.sub(r"url\('?\.\./(vendor/stacked-ds/fonts/[^)']+\.woff2)'?\)", lambda m: f'url(data:font/woff2;base64,{b64(m.group(1))})', css)
+# the design system's own stylesheets; its .otf @font-face rules are dropped (the
+# interface uses the woff2 copies above, the text tool reads the .otf from __ASSETS)
+ds_tokens = re.sub(r'@font-face\s*\{[^}]*\}\s*', '', read('vendor/stacked-ds/tokens.css'))
+ds_components = read('vendor/stacked-ds/components.css')
 
 html = read('index.html')
+html = html.replace('<link rel="stylesheet" href="vendor/stacked-ds/tokens.css">', '<style>' + ds_tokens + '</style>')
+html = html.replace('<link rel="stylesheet" href="vendor/stacked-ds/components.css">', '<style>' + ds_components + '</style>')
 html = html.replace('<link rel="stylesheet" href="css/app.css">', '<style>' + css + '</style>')
+html = re.sub(r'src="(vendor/[^"]+\.svg)"', lambda m: f'src="data:image/svg+xml;base64,{b64(m.group(1))}"', html)
 for src in re.findall(r'<script src="(vendor/[^"]+)"></script>', html):
     html = html.replace(f'<script src="{src}"></script>', script(read(src)))
 html = html.replace('<script type="module" src="js/main.js"></script>', '')

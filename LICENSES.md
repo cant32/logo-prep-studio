@@ -13,9 +13,10 @@ All bundled components allow internal commercial use.
 | [opentype.js](https://github.com/opentypejs/opentype.js) 1.3 | text to outlines | MIT |
 | [PDF.js](https://github.com/mozilla/pdf.js) 3.11 (Mozilla) | reading PDF and AI files | Apache-2.0, see `vendor/pdfjs/LICENSE` |
 | [jsPDF](https://github.com/parallax/jsPDF) 2.5 + [svg2pdf.js](https://github.com/yWorks/svg2pdf.js) 2.2 | PDF export | MIT |
-| Fonts via [Fontsource](https://fontsource.org): Inter, Montserrat, Oswald, Bebas Neue, Anton, Playfair Display, Pacifico, Lobster, M PLUS Rounded 1c | Text tool and interface | SIL Open Font License 1.1 |
+| Gotham Rounded and Gotham (Hoefler&Co) | interface and Text tool | Licensed by Stacked; from the Stacked design system. Check the licence covers web use before hosting the tool publicly. |
+| Fonts via [Fontsource](https://fontsource.org): Inter, Montserrat, Oswald, Bebas Neue, Anton, Playfair Display, Pacifico, Lobster | Text tool | SIL Open Font License 1.1 |
 | Fonts via Fontsource: Roboto Slab, Permanent Marker | Text tool | Apache-2.0 |
 
 The colour clean-up (`js/palette.js`) and layer separation (`js/trace.js`) are written for this tool.
 
-The stacked group logo in the header is company brand artwork, used for this internal tool only.
+`vendor/stacked-ds/` (tokens, components, logos, fonts) is the Stacked design system, company brand material used for this internal tool only.

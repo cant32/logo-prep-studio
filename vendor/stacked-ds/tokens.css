@@ -1,0 +1,200 @@
+/* Stacked design system: fonts, colours, type, radii and motion.
+   Taken from the Stacked Arcade games (public/play/play.css, public/wall/index.html, public/brand/brand.js),
+   the 2026 logo pack, the 2025 colour change and the AV, AV Events, MPS and WPS artwork. */
+
+/* ---------- Fonts ---------- */
+/* Gotham Rounded is the house face. Standard Gotham sits alongside it for brochures, programmes, the AV and
+   AV Events artwork and campaign lines. The pixel font is only for game titles and arcade bits.
+   Family names are one word (GothamRounded) so they never break a single-quoted canvas font string. */
+@font-face { font-family: 'GothamRounded'; src: url('fonts/GothamRounded-Light.otf') format('opentype'); font-weight: 300; font-display: swap; }
+@font-face { font-family: 'GothamRounded'; src: url('fonts/GothamRounded-LightItalic.otf') format('opentype'); font-weight: 300; font-style: italic; font-display: swap; }
+@font-face { font-family: 'GothamRounded'; src: url('fonts/GothamRounded-Book.otf') format('opentype'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'GothamRounded'; src: url('fonts/GothamRounded-BookItalic.otf') format('opentype'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'GothamRounded'; src: url('fonts/GothamRounded-Medium.otf') format('opentype'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'GothamRounded'; src: url('fonts/GothamRounded-Bold.otf') format('opentype'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'GothamRounded'; src: url('fonts/GothamRounded-BoldItalic.otf') format('opentype'); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Gotham'; src: url('fonts/Gotham-Light.otf') format('opentype'); font-weight: 300; font-display: swap; }
+@font-face { font-family: 'Gotham'; src: url('fonts/Gotham-LightItalic.otf') format('opentype'); font-weight: 300; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Gotham'; src: url('fonts/Gotham-Book.otf') format('opentype'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Gotham'; src: url('fonts/Gotham-BookItalic.otf') format('opentype'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Gotham'; src: url('fonts/Gotham-Medium.otf') format('opentype'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Gotham'; src: url('fonts/Gotham-Bold.otf') format('opentype'); font-weight: 700; font-display: swap; }
+@font-face { font-family: 'Gotham'; src: url('fonts/Gotham-BoldItalic.otf') format('opentype'); font-weight: 700; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Gotham'; src: url('fonts/Gotham-Black.otf') format('opentype'); font-weight: 900; font-display: swap; }
+@font-face { font-family: 'Gotham'; src: url('fonts/Gotham-BlackItalic.otf') format('opentype'); font-weight: 900; font-style: italic; font-display: swap; }
+@font-face { font-family: 'PressStart2P'; src: url('fonts/PressStart2P.ttf') format('truetype'); font-display: swap; }
+
+:root {
+  /* ---------- Primary palette ----------
+     Two specs for the same two colours. SCREEN (web, social, slides, video, signage) uses the hex values below.
+     PRINT (vans, brochures, flyers, stands, merch) always uses the Pantones and their CMYK, never a conversion of the screen hex. */
+  --stacked-orange: #FF7712;     /* Screen orange, R255 G119 B18, as drawn in the 2026 logo files (sRGB). Screen only. */
+  --stacked-charcoal: #202326;   /* Screen charcoal, R32 G35 B38, the 2026 logo near-black. Backgrounds, panels, the dark side of every layout. Screen only. */
+  /* Print: Pantone 158C orange · C0 M64 Y92 K0 · R232 G121 B40. As used on the 2025 van wraps. */
+  --print-orange: #E87928;
+  /* Print: Pantone 426C dark · C77 M65 Y57 K72 · R36 G39 B44. As used on the 2025 van wraps. */
+  --print-dark: #24272C;
+  --stacked-grey: #616365;       /* Pantone 10C · C0 M0 Y0 K70. Speech panels, quiet labels, grey tile ramps. */
+  --stacked-black: #202326;      /* The logo bars and black lockups: the same near-black as the screen charcoal. */
+  --stacked-ink: #202326;        /* Charcoal: optional higher-contrast text on orange (5.9:1). */
+  --stacked-gold: #F4AF23;       /* Pantone 4008C. Used sparingly now: an optional second sphere, events and seasonal. */
+
+  /* Tints used on screen */
+  --stacked-orange-light: #FF9445; /* pressed / lit state */
+  --stacked-orange-deep: #B85208;  /* 3D button edge, shadow side of orange shapes */
+
+  /* Older screen values, kept only so old screen artwork can be matched: 2024 decks, then the 2025 colour card. */
+  --stacked-orange-2024: #EE7623;
+  --stacked-charcoal-2024: #24282A;
+  --stacked-orange-2025: #FF6000;
+  --stacked-charcoal-2025: #383838;
+
+  /* ---------- Secondary palette ----------
+     Use modestly where required: only for highlights or events. The full palette is fine for illustrations. */
+  --stacked-purple: #60398E;
+  --stacked-blue: #4C5CA6;
+  --stacked-lilac: #875DA3;
+  --stacked-pink: #EA69A4;
+  --stacked-teal: #51BFD2;
+  --stacked-light: #E4E5E3;
+  --stacked-cream: #E6D6AA;      /* Sam's muzzle and tummy */
+
+  /* ---------- Context palettes: each belongs to one kind of artwork ---------- */
+  --av-night: #1F252B;           /* Photo-led AV and AV Events pages, banners and programmes */
+  --av-night-raised: #282F36;
+  --service-blue: #41A0E9;       /* Service Team stats: blue cards on orange (AV), orange cards on blue (MPS) */
+  --service-blue-light: #93C4E8;
+  --service-slate: #4D4D4D;      /* Header bar and stat panels on the Service Team stats */
+  --eco-green: #182214;          /* MPS sustainability (PrintReleaf) background */
+  --eco-lime: #9AB644;           /* Stats on the sustainability pieces */
+  --advantage-navy: #1E1130;     /* Stacked Advantage card */
+  --network-pink: #EC71A9;       /* Stacked women's network */
+  --network-magenta: #B9368F;
+  --network-purple: #674394;
+  --event-gold: #FFA600;
+  --hp-blue: #0096D6;            /* HP blue: call-to-action pills on HP-led pieces only */
+  --zen-ink: #221732;            /* Zen Zone (a Stacked product): aubergine letters and dark ground */
+  --zen-paper: #F2E9E9;          /* Zen Zone off-white */
+  /* Zen Zone outline and glow, purple through pink and gold to orange (sampled from the logo file) */
+  --zen-gradient: linear-gradient(90deg, #673A94 0%, #9E269C 30%, #DF82C4 52%, #F5A326 78%, #F15A16 100%); /* @kind color */         /* Internal events: Big Quiz, Summer BBQ */
+  --bantc-1: #999999;            /* Grey ramp for step frameworks, light to dark, ending in orange */
+  --bantc-2: #808080;
+  --bantc-3: #6D6F71;
+  --bantc-4: #4D4D4D;
+
+  /* ---------- Gradients: for backgrounds only ---------- */
+  /* Orange at the bottom left into pink at the top right */
+  --stacked-gradient: linear-gradient(45deg, #FF7712 0%, #F26B5C 55%, #E0697E 100%); /* @kind color */
+  /* Grey at the top left into charcoal at the bottom right */
+  --stacked-gradient-dark: linear-gradient(120deg, #616365 0%, #3A3D41 45%, #202326 80%); /* @kind color */
+  /* Vertical version for skies and tall panels (On The Road) */
+  --stacked-gradient-sky: linear-gradient(180deg, #E0697E 0%, #F27048 50%, #FF7712 100%); /* @kind color */
+  /* Darkening wash over photos so white headlines read (AV brochure, AV Events) */
+  --photo-wash: linear-gradient(180deg, rgba(31, 37, 43, 0.15) 0%, rgba(31, 37, 43, 0.55) 55%, rgba(31, 37, 43, 0.95) 100%); /* @kind color */
+
+  /* ---------- Shape ---------- */
+  /* Dashed lines with round caps (CSS dashes are square): 6px dashes, 4px gaps, 2px thick, in orange */
+  --dash-line: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='2'%3E%3Cline x1='1' y1='1' x2='6' y2='1' stroke='%23FF7712' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E"); /* @kind other */
+  /* The brand "drop": round, with a squared-off bottom-left corner. Swatches, numbered steps and avatars. */
+  --shape-drop: 50% 50% 50% 4px; /* @kind radius */
+  /* Photo frame on the AV brochure: big rounded corners */
+  --radius-photo: 28px;
+
+  /* ---------- Semantic ---------- */
+  --bg: var(--stacked-charcoal);
+  --surface: #2E3237;                     /* toasts, floating pills */
+  --panel: rgba(255, 255, 255, 0.07);     /* boxes on the background */
+  --line: rgba(255, 255, 255, 0.14);      /* quiet borders */
+  --line-strong: rgba(255, 255, 255, 0.22);
+  --accent: var(--stacked-orange);
+  --accent-tint: rgba(255, 119, 18, 0.16); /* selected card fill */
+  --text: #FFFFFF;
+  --muted: #B4B4B4;                       /* 7.6:1 on charcoal */
+  /* White text on orange is house style (buttons, pills, URLs, headlines): keep it Medium or Bold at small sizes. Charcoal is the higher-contrast option. */
+  --ink: var(--stacked-ink);
+  --error: #FF8A8A;
+  --focus: #FFFFFF;
+
+  /* ---------- Department colours (league table bars) ---------- */
+  --dept-servicedesk: #FF7712;
+  --dept-finance: #4C5CA6;
+  --dept-hardware: #51BFD2;
+  --dept-digital: #EA69A4;
+  --dept-workplace: #F4AF23;
+  --dept-marketing: #875DA3;
+  --dept-operations: #9B7BD0;
+  --dept-guest: #9AA3AB;
+
+  /* ---------- Type ---------- */
+  --font-ui: 'GothamRounded', 'Helvetica Neue', Arial, sans-serif;
+  --font-gotham: 'Gotham', 'Helvetica Neue', Arial, sans-serif;
+  --font-pixel: 'PressStart2P', monospace;
+  --text-xs: 12px;   /* badges, labels over rows */
+  --text-sm: 13px;   /* notes, small buttons */
+  --text-md: 15px;
+  --text-lg: 18px;   /* buttons, section labels */
+  --text-xl: 26px;
+  --text-2xl: 34px;  /* big statements */
+  --text-name: 42px; /* player initials */
+  --text-score: 56px;
+  --tracking-label: 0.1em;  /* uppercase labels */
+  --tracking-button: 0.08em;
+  --tracking-name: 0.16em;
+  --tracking-wide: 0.12em;  /* AV capitals only (headings, kickers): never on running text */
+  --tracking-body: 0.02em;  /* running text: a touch open, never more */
+  --tracking-display: 0.04em; /* big capitals: tight enough to read as one word */
+
+  /* Line height by role (unitless so it scales with size) */
+  --leading-display: 1.05;  /* one or two lines of big type */
+  --leading-heading: 1.15;
+  --leading-snug: 1.3;      /* short labels and captions that may wrap */
+  --leading-body: 1.55;     /* anything that runs to three lines or more */
+
+  /* Measure: running text stops here */
+  --measure: 62ch;
+  --measure-narrow: 40ch;   /* columns, captions, card copy */
+
+  /* Spacing: 4px base, every gap and margin comes from here */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  /* ---------- Grids ----------
+     Measured from Stacked's own Illustrator artwork: every layout is a FIVE-COLUMN grid with equal outer margins
+     of about 4.5–6% of the page width. Text and logos start on a column line and stay inside the margins.
+     Decorative shapes (circles, arcs, waves) may bleed off the edge but never carry text.
+     Rows are a layout aid: equal bands between the top and bottom margins. */
+  --baseline: 8px;
+  /* Slide 16:9. Pitch decks 2025 and Q1 2026 at 1440 × 810: margin 85, columns 223, gutter 38 (lines at 85, 346, 609, 867, 1130) */
+  --grid-slide-margin: 76px;  --grid-slide-cols: 5; /* @kind other */ --grid-slide-rows: 6; /* @kind other */ --grid-slide-gutter: 34px;   /* at 1280 × 720 */
+  /* A4 portrait. AV systems integrator brochure: side margin 26, columns 88, gutter 25 (lines at 26, 252, 367) */
+  --grid-a4-margin: 26px; --grid-a4-margin-y: 36px; --grid-a4-cols: 5; /* @kind other */ --grid-a4-rows: 8; /* @kind other */ --grid-a4-gutter: 25px;
+  /* A4 landscape / A5 landscape books (AV Events). Margin 36 from the trim, five columns (lines at 45, 200, 356, 512, 667 with bleed) */
+  --grid-a5-margin: 26px;     --grid-a5-cols: 5; /* @kind other */    --grid-a5-rows: 6; /* @kind other */    --grid-a5-gutter: 12px;   /* at 597 × 425 */
+  /* Square social post 400 × 400 (1080 × 1080 export) */
+  --grid-square-margin: 24px; --grid-square-cols: 5; /* @kind other */ --grid-square-rows: 5; /* @kind other */ --grid-square-gutter: 12px;
+  /* Tall social post 460 × 820 */
+  --grid-tall-margin: 24px;   --grid-tall-cols: 5; /* @kind other */  --grid-tall-rows: 10; /* @kind other */ --grid-tall-gutter: 12px;
+  /* Web banners: margin is a fixed share of the height */
+  --grid-banner-margin: 16px; --grid-banner-cols: 5; /* @kind other */ --grid-banner-gutter: 12px;
+  /* Cards (85.6 × 54 mm) */
+  --grid-card-margin: 7%;     --grid-card-cols: 5; /* @kind other */  --grid-card-rows: 4; /* @kind other */  --grid-card-gutter: 3%;
+
+  /* ---------- Shape ---------- */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 22px;   /* controller pads */
+  --radius-pill: 999px;
+  --border: 3px;
+  --column: 340px;     /* phone screens: everything shares one column */
+
+  /* ---------- Motion ---------- */
+  --ease-rise: cubic-bezier(0.2, 0.8, 0.2, 1); /* @kind other */
+  --ease-pop: cubic-bezier(0.2, 1.6, 0.4, 1); /* @kind other */
+  --glow: 0 0 24px rgba(255, 119, 18, 0.5);
+}

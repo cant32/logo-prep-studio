@@ -36,16 +36,16 @@ Use Chrome or Edge. A computer with a graphics card makes the AI upscaling fast 
    - Adjust **Colours**, **Detail** and **Corners** and the logo re-traces automatically.
 3. **Colours**: click a swatch to change an ink. Untick an ink to knock it out, so the garment shows through. **Make one colour** sets everything to a single ink. **Erase shapes** deletes stray bits, and **Paint shapes** recolours individual shapes (useful for fixing specks or breaks in thin lines).
 4. **Text**: added text is built from the font's letter outlines, so it prints exactly as shown and never depends on the printer having the font. Includes curve (arc up or down), letter spacing and logo-colour quick picks. **Use your own font file** loads a .ttf, .otf or .woff file, such as the licensed brand font Gotham Rounded, for the current session.
-5. **Print-ready export**: choose the print method and the print width in mm. Every file is produced at that real size.
+5. **Print-ready export**: choose the print method and the print width in mm. Every file is produced at that real size. Exports are PDF, EPS and PNG only (no SVG), to match what suppliers accept.
 
 | Method | Files | Checks |
 |---|---|---|
-| Screen print | Vector SVG (one group per ink), vector PDF, **separations PDF** (one black film page per ink, with registration marks), EPS, mock-up PNG | lines < 0.3 mm, gaps < 0.3 mm, more than 6 inks |
-| Digital (DTG) / DTF | 300 dpi transparent PNG (DPI written into the file), PDF, SVG, EPS | lines < 0.3 / 0.5 mm, gaps |
-| Laser engrave | Solid black SVG / PDF / EPS, 600 dpi PNG | lines < 0.15 mm |
-| Vinyl / HTV cut | Cut-line SVG / EPS (outlines, one colour per layer), filled SVG, PDF, **mirror option** for heat-transfer vinyl | lines < 1 mm, gaps < 0.8 mm |
-| Laser cut | Red hairline cut SVG / PDF / EPS, solid SVG | lines < 0.8 mm, gaps < 0.5 mm |
-| Embroidery | Clean SVG / PNG for the digitiser | lines < 1.2 mm |
+| Screen print | Vector PDF (spot colours), **separations PDF** (one black film page per ink, with registration marks), EPS | lines < 0.3 mm, gaps < 0.3 mm, more than 6 inks |
+| Digital (DTG) / DTF | 300 dpi transparent PNG (DPI written into the file), PDF, EPS | lines < 0.3 / 0.5 mm, gaps |
+| Laser engrave | Solid black PDF / EPS, 600 dpi PNG | lines < 0.15 mm |
+| Vinyl / HTV cut | Cut-line PDF / EPS (outlines, one colour per layer), filled PDF, **mirror option** for heat-transfer vinyl | lines < 1 mm, gaps < 0.8 mm |
+| Laser cut | Red hairline cut PDF / EPS, solid black PDF | lines < 0.8 mm, gaps < 0.5 mm |
+| Embroidery | Clean PDF / EPS / PNG for the digitiser | lines < 1.2 mm |
 
 The checks render the finished design at its real print size and highlight problem areas in red (too thin) and orange (gaps that may fill in). The limits are typical shop guidance; confirm with your printer for unusual materials.
 
@@ -65,11 +65,11 @@ The preview bar shows the design on white, black, navy, grey, red or any custom 
 
 Everything runs from this folder, with no internet needed once it's loaded:
 
-- `js/`: the app (`trace.js` colour clean-up and tracing, `upscale.js` AI upscaling, `pdf.js` PDF/AI reading, `editor.js` canvas, `text.js` outlined text, `export.js` SVG/PDF/EPS/PNG files, `checks.js` print checks)
+- `js/`: the app (`trace.js` colour clean-up and tracing, `upscale.js` AI upscaling, `pdf.js` PDF/AI reading, `editor.js` canvas, `text.js` outlined text, `export.js` PDF/EPS/PNG files, `checks.js` print checks)
 - `tools/build-single.py`: rebuilds `Logo Prep Studio.html` from the source
 - `vendor/`: third-party libraries and AI models (see `LICENSES.md`)
 - `fonts/`: open-licence fonts for the Text tool and the interface
 
 ## Brand
 
-The interface uses the stacked group palette (Pantone 158C orange `#EE7623`, 426C charcoal `#25282A`, 10C grey `#616365`, 4008C `#F4AF23`, accent `#51BFD2`). The brand typeface, Gotham Rounded, is licensed and isn't bundled; the interface uses M PLUS Rounded 1c, a free rounded geometric stand-in. To use real Gotham Rounded in the interface, add the licensed `.woff2` files to `fonts/` and point the `@font-face` rules at the top of `css/app.css` to them.
+The interface uses the stacked group palette (from the 2025 brand cheat sheet: Pantone 158C orange `#E87928`, 426C dark grey `#24272C`, 10C grey `#63666F`, 4008C `#F4AF23`, accent `#51BFD2`). The brand typeface, Gotham Rounded, is licensed and isn't bundled; the interface uses M PLUS Rounded 1c, a free rounded geometric stand-in. To use real Gotham Rounded in the interface, add the licensed `.woff2` files to `fonts/` and point the `@font-face` rules at the top of `css/app.css` to them.

@@ -455,45 +455,39 @@ Object.entries(METHODS).forEach(([k, m]) => $('#method').add(new Option(m.label,
 
 const EXPORTS = {
   screen: [
-    ['svg', 'Vector SVG', 'Spot colours, one group per ink, text outlined'],
-    ['pdf', 'Vector PDF', 'Actual size, for the printer or RIP'],
+    ['pdf', 'Vector PDF', 'Spot colours, actual size, for the printer or RIP'],
     ['seps', 'Separations PDF', 'One black film page per ink, with registration marks'],
-    ['eps', 'Vector EPS', 'For suppliers who ask for EPS'],
-    ['png', 'Mock-up PNG', '300 dpi, transparent background'],
+    ['eps', 'Vector EPS', 'Spot colours, actual size, text outlined'],
   ],
   dtg: [
     ['png', 'Print PNG (300 dpi)', 'Transparent background, full colour'],
     ['pdf', 'Vector PDF', 'Actual size'],
-    ['svg', 'Vector SVG', 'For editing or other software'],
-    ['eps', 'Vector EPS', 'For suppliers who ask for EPS'],
+    ['eps', 'Vector EPS', 'Actual size'],
   ],
   dtf: [
     ['png', 'Print PNG (300 dpi)', 'Transparent background, full colour'],
     ['pdf', 'Vector PDF', 'Actual size'],
-    ['svg', 'Vector SVG', 'For editing or other software'],
+    ['eps', 'Vector EPS', 'Actual size'],
   ],
   engrave: [
-    ['svg-black', 'Engrave SVG', 'Solid black, actual size (LightBurn, RDWorks, etc.)'],
-    ['pdf-black', 'Engrave PDF', 'Solid black, actual size'],
-    ['png-black', 'Engrave PNG (600 dpi)', 'For raster engraving'],
+    ['pdf-black', 'Engrave PDF', 'Solid black, actual size (LightBurn, RDWorks, etc.)'],
     ['eps-black', 'Engrave EPS', 'Solid black, actual size'],
+    ['png-black', 'Engrave PNG (600 dpi)', 'For raster engraving'],
   ],
   vinyl: [
-    ['svg-cut', 'Cut SVG', 'Outlines only, one colour per layer (Cricut, Silhouette, Roland)'],
-    ['svg', 'Filled SVG', 'Solid shapes, one group per colour'],
-    ['eps-cut', 'Cut EPS', 'Outlines only, for older cutter software'],
-    ['pdf', 'Vector PDF', 'Actual size'],
+    ['pdf-cut', 'Cut PDF', 'Outlines only, one colour per layer (Cricut, Silhouette, Roland)'],
+    ['eps-cut', 'Cut EPS', 'Outlines only, for cutter software that takes EPS'],
+    ['pdf', 'Filled PDF', 'Solid shapes in their colours, actual size'],
   ],
   lasercut: [
-    ['svg-hairline', 'Cut SVG', 'Red hairline outlines, actual size'],
-    ['svg-black', 'Solid SVG', 'Filled black, for engrave + cut jobs'],
-    ['pdf-hairline', 'Cut PDF', 'Hairline outlines, actual size'],
+    ['pdf-hairline', 'Cut PDF', 'Red hairline outlines, actual size'],
     ['eps-hairline', 'Cut EPS', 'Red hairline outlines, actual size'],
+    ['pdf-black', 'Solid PDF', 'Filled black, for engrave + cut jobs'],
   ],
   embroidery: [
-    ['svg', 'Artwork SVG', 'Clean vector for the digitiser'],
+    ['pdf', 'Artwork PDF', 'Clean vector for the digitiser'],
+    ['eps', 'Artwork EPS', 'For digitising software that takes EPS'],
     ['png', 'Artwork PNG (300 dpi)', 'Transparent background'],
-    ['eps', 'Artwork EPS', 'For older digitising software'],
   ],
 };
 
@@ -538,16 +532,13 @@ async function doExport(kind, method) {
   const base = `${state.name}_${method}_${Math.round(o.widthMm)}mm${o.mirror ? '_mirrored' : ''}`;
   const single = { ...o, mode: 'single', color: '#000000' };
   switch (kind) {
-    case 'svg': return download(base + '.svg', buildSVG(editor, o).svg, 'image/svg+xml');
-    case 'svg-black': return download(base + '.svg', buildSVG(editor, single).svg, 'image/svg+xml');
-    case 'svg-cut': return download(base + '_cut.svg', buildSVG(editor, { ...o, mode: 'outline', color: 'ink', strokeMm: 0.1 }).svg, 'image/svg+xml');
-    case 'svg-hairline': return download(base + '_cut.svg', buildSVG(editor, { ...o, mode: 'outline', color: '#ff0000', strokeMm: 0.01 }).svg, 'image/svg+xml');
     case 'eps': return saveEps(base + '.eps', buildEPS(editor, o));
     case 'eps-black': return saveEps(base + '.eps', buildEPS(editor, single));
     case 'eps-cut': return saveEps(base + '_cut.eps', buildEPS(editor, { ...o, mode: 'outline', color: 'ink', strokeMm: 0.1 }));
     case 'eps-hairline': return saveEps(base + '_cut.eps', buildEPS(editor, { ...o, mode: 'outline', color: '#ff0000', strokeMm: 0.01 }));
     case 'pdf': return download(base + '.pdf', await pdfBlob(buildSVG(editor, o)));
     case 'pdf-black': return download(base + '.pdf', await pdfBlob(buildSVG(editor, single)));
+    case 'pdf-cut': return download(base + '_cut.pdf', await pdfBlob(buildSVG(editor, { ...o, mode: 'outline', color: 'ink', strokeMm: 0.1 })));
     case 'pdf-hairline': return download(base + '_cut.pdf', await pdfBlob(buildSVG(editor, { ...o, mode: 'outline', color: '#ff0000', strokeMm: 0.01 })));
     case 'png': { const r = await pngBlob(buildSVG(editor, o), 300); toast(`PNG ${r.w} × ${r.h} px at ${r.dpi} dpi`); return download(base + '.png', r.blob); }
     case 'png-black': { const r = await pngBlob(buildSVG(editor, single), 600); toast(`PNG ${r.w} × ${r.h} px at ${r.dpi} dpi`); return download(base + '.png', r.blob); }

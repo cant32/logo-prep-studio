@@ -7,10 +7,10 @@
 @font-face { font-family: "Brand Rounded"; font-weight: 800; src: url(../fonts/m-plus-rounded-1c-latin-800-normal.woff2) format("woff2"); }
 
 :root {
-  --orange: #ee7623;        /* Pantone 158C */
+  --orange: #e87928;        /* Pantone 158C, 2025 brand cheat sheet */
   --amber: #f4af23;         /* Pantone 4008C */
-  --charcoal: #25282a;      /* Pantone 426C */
-  --grey: #616365;          /* Pantone 10C */
+  --charcoal: #24272c;      /* Pantone 426C */
+  --grey: #63666f;          /* Pantone 10C */
   --light: #e4e5e3;
   --teal: #51bfd2;
   --pink: #ea69a4;
@@ -23,7 +23,7 @@
   --line: #3a3d40;
   --accent: var(--orange);
   --accent-ink: var(--charcoal);
-  --accent-soft: rgba(238, 118, 35, .14);
+  --accent-soft: rgba(232, 121, 40, .14);
   --ok: var(--teal);
   --ok-soft: rgba(81, 191, 210, .12);
   --warn: var(--amber);
@@ -118,7 +118,7 @@ button { font: inherit; font-weight: 500; padding: 8px 14px; border-radius: 999p
 button:hover:not(:disabled) { border-color: var(--orange); }
 button:disabled { opacity: .45; cursor: default; }
 button.primary { background: var(--orange); color: var(--charcoal); border-color: var(--orange); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; font-size: 12.5px; }
-button.primary:hover:not(:disabled) { background: #f58a3f; }
+button.primary:hover:not(:disabled) { background: #ef8d45; }
 button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--orange); color: var(--orange); }
 #run { width: 100%; padding: 11px; }
 .row { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }

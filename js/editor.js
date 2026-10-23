@@ -5,7 +5,7 @@
 import { Canvas, Group, Path, Point, Color, FabricObject, loadSVGFromString, util } from '../vendor/fabric.min.js';
 
 // selection handles in brand orange
-Object.assign(FabricObject.ownDefaults, { borderColor: '#ee7623', cornerColor: '#ee7623', cornerStrokeColor: '#25282a', cornerStyle: 'circle', transparentCorners: false, cornerSize: 11, borderScaleFactor: 1.5 });
+Object.assign(FabricObject.ownDefaults, { borderColor: '#e87928', cornerColor: '#e87928', cornerStrokeColor: '#24272c', cornerStyle: 'circle', transparentCorners: false, cornerSize: 11, borderScaleFactor: 1.5 });
 import { layoutText, loadFont } from './text.js';
 
 const KEEP = ['isLogo', 'isText', 'textProps', 'subTargetCheck', 'inkLocked'];
@@ -20,7 +20,7 @@ export class Editor {
     this.host = host;
     this.onChange = onChange || (() => {});
     this.onSelect = onSelect || (() => {});
-    this.canvas = new Canvas(el, { preserveObjectStacking: true, selectionColor: 'rgba(238,118,35,.1)', selectionBorderColor: '#ee7623' });
+    this.canvas = new Canvas(el, { preserveObjectStacking: true, selectionColor: 'rgba(232,121,40,.1)', selectionBorderColor: '#e87928' });
     this.tool = null;          // null | 'erase' | 'paint'
     this.paintColor = '#000000';
     this.history = [];

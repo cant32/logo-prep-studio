@@ -15,6 +15,76 @@ export const normColor = c => {
   try { return '#' + new Color(c).toHex().toLowerCase().slice(0, 6); } catch { return null; }
 };
 
+// Designers' files often keep a whole wordmark as one compound path, so a
+// click would paint or delete every letter at once. Split each compound path
+// into its separate pieces: every outer outline keeps the holes inside it
+// (the counter of an "o" stays with the "o"), so it looks exactly the same.
+export function splitCompoundPaths(svg) {
+  if (!/<path\b[^>]*\sd\s*=\s*["'][^"']*[Mm][^"']*[Mm]/.test(svg)) return svg;   // nothing compound
+  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+  if (doc.querySelector('parsererror')) return svg;
+  const ctx = new OffscreenCanvas(1, 1).getContext('2d');
+  let changed = false;
+  for (const el of doc.querySelectorAll('path')) {
+    let rule = '';
+    for (let n = el; n && n.getAttribute && !rule; n = n.parentNode) rule = n.getAttribute('fill-rule') || (/fill-rule\s*:\s*(\w+)/.exec(n.getAttribute('style') || '') || [])[1] || '';
+    const pieces = splitPathData(el.getAttribute('d') || '', ctx, rule === 'evenodd');
+    if (!pieces || pieces.length < 2) continue;
+    for (const d of pieces) {
+      const copy = el.cloneNode(false);
+      copy.removeAttribute('id');
+      copy.setAttribute('d', d);
+      el.parentNode.insertBefore(copy, el);
+    }
+    el.remove();
+    changed = true;
+  }
+  return changed ? new XMLSerializer().serializeToString(doc.documentElement) : svg;
+}
+
+function splitPathData(d, ctx, evenodd) {
+  let cmds;
+  try { cmds = util.makePathSimpler(util.parsePath(d)); } catch { return null; }
+  const subs = [];
+  for (const c of cmds) { if (c[0] === 'M' || !subs.length) subs.push([]); subs[subs.length - 1].push(c); }
+  if (subs.length < 2 || subs.length > 3000) return null;
+  const info = subs.map(cs => {
+    const xs = [], ys = [];
+    for (const c of cs) for (let i = 1; i + 1 < c.length; i += 2) { xs.push(c[i]); ys.push(c[i + 1]); }
+    const box = { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+    // a point on this outline, to ask which other outline it sits inside
+    const p = cs[0][0] === 'M' ? [cs[0][1], cs[0][2]] : [xs[0], ys[0]];
+    return { cs, box, area: (box.x1 - box.x0) * (box.y1 - box.y0), p, path: new Path2D(util.joinPath(cs)), parent: -1, depth: 0 };
+  });
+  // parent = the smallest larger outline that contains this one
+  const order = info.map((_, i) => i).sort((a, b) => info[b].area - info[a].area);
+  order.forEach((i, k) => {
+    const s = info[i];
+    for (let j = k - 1; j >= 0; j--) {
+      const o = info[order[j]];
+      if (s.box.x0 < o.box.x0 - 1e-6 || s.box.y0 < o.box.y0 - 1e-6 || s.box.x1 > o.box.x1 + 1e-6 || s.box.y1 > o.box.y1 + 1e-6) continue;
+      if (ctx.isPointInPath(o.path, s.p[0], s.p[1])) { s.parent = order[j]; s.depth = o.depth + 1; break; }
+    }
+  });
+  // even depth = a piece, odd depth = a hole in its parent piece
+  const tops = info.filter(s => s.depth % 2 === 0);
+  if (tops.length < 2) return null;
+  // with even-odd filling, pieces that overlap each other cancel out where
+  // they cross; splitting would fill that in, so leave such paths whole
+  const within = (s, o) => { for (let p = s.parent; p >= 0; p = info[p].parent) if (info[p] === o) return true; return false; };
+  if (evenodd) for (let a = 0; a < tops.length; a++) for (let b = a + 1; b < tops.length; b++) {
+    const A = tops[a].box, B = tops[b].box;
+    if (A.x0 < B.x1 && B.x0 < A.x1 && A.y0 < B.y1 && B.y0 < A.y1 && !within(tops[a], tops[b]) && !within(tops[b], tops[a])) {
+      // overlapping boxes: only a problem if the outlines really cross
+      if (ctx.isPointInPath(tops[a].path, tops[b].p[0], tops[b].p[1]) || ctx.isPointInPath(tops[b].path, tops[a].p[0], tops[a].p[1])) return null;
+    }
+  }
+  return tops.map(t => {
+    const i = info.indexOf(t);
+    return util.joinPath([...t.cs, ...info.filter(h => h.parent === i && h.depth % 2 === 1).flatMap(h => h.cs)]);
+  });
+}
+
 export class Editor {
   constructor(el, host, { onChange, onSelect } = {}) {
     this.host = host;
@@ -34,7 +104,7 @@ export class Editor {
     c.on('selection:cleared', () => this.onSelect(null));
     c.on('mouse:down', e => {
       if (!this.tool) return;
-      const shape = e.target && e.target.isLogo ? e.subTargets && e.subTargets[0] : e.target;
+      const shape = this.shapeAt(c.getViewportPoint(e.e), c.getScenePoint(e.e));
       if (!shape) return;
       if (this.tool === 'erase') {
         if (shape.group) shape.group.remove(shape); else c.remove(shape);
@@ -47,6 +117,37 @@ export class Editor {
       this.commit();
     });
   }
+
+  // The shape actually painted under a screen point, topmost first. Fabric
+  // only checks bounding boxes, which picks the wrong shape whenever boxes
+  // overlap (holes, rings, letters inside a badge). Each candidate is drawn
+  // into a tiny canvas around the point to see if it really covers it; if
+  // nothing is exactly under the point, a shape within a few pixels counts.
+  shapeAt(pt, scene) {
+    const R = 4, size = R * 2 + 1;
+    const ctx = (this._hit ||= new OffscreenCanvas(size, size)).getContext('2d', { willReadFrequently: true });
+    const vt = this.canvas.viewportTransform;
+    const candidates = this.leaves().filter(o => this.isShown(o) && o.visible !== false).reverse();
+    let near = null;
+    for (const o of candidates) {
+      const b = o.getBoundingRect(), r = R / (vt[0] || 1);   // box in scene units: a cheap first filter
+      if (scene.x < b.left - r || scene.x > b.left + b.width + r || scene.y < b.top - r || scene.y > b.top + b.height + r) continue;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, size, size);
+      ctx.setTransform(...util.multiplyTransformMatrices([1, 0, 0, 1, R - pt.x, R - pt.y], util.multiplyTransformMatrices(vt, o.calcTransformMatrix())));
+      ctx.fillStyle = ctx.strokeStyle = '#000';
+      ctx.lineWidth = o.strokeWidth || 0;
+      ctx.globalAlpha = 1;
+      try { o._render(ctx); } catch { continue; }
+      const px = ctx.getImageData(0, 0, size, size).data;
+      if (px[(R * size + R) * 4 + 3] > 20) return o;
+      if (!near) for (let i = 3; i < px.length; i += 4) if (px[i] > 20) { near = o; break; }
+    }
+    return near;
+  }
+
+  // false for shapes inside a hidden group
+  isShown(o) { for (let g = o.group; g; g = g.group) if (g.visible === false) return false; return true; }
 
   resize() {
     const r = this.host.getBoundingClientRect();
@@ -62,7 +163,7 @@ export class Editor {
 
   // Replace the logo with new vector artwork (an SVG string).
   async setLogo(svg) {
-    const { objects } = await loadSVGFromString(svg);
+    const { objects } = await loadSVGFromString(splitCompoundPaths(svg));
     const shapes = objects.filter(Boolean);
     for (const s of shapes) {
       s.fill = normColor(s.fill) || s.fill;

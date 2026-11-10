@@ -44,6 +44,8 @@ const editor = new Editor($('#canvas'), $('#canvasHost'), {
   onSelect: obj => showTextProps(obj && obj.isText ? obj : null),
 });
 
+if (new URLSearchParams(location.search).has('debug')) globalThis.lpsEditor = editor;   // for tests
+
 // ---------------------------------------------------------------- loading
 
 async function loadFile(file) {

@@ -1,5 +1,5 @@
 // Logo Prep Studio server: hands out the app's files and runs the website
-// logo search (/api/logos). The app itself runs in each person's browser;
+// logo search (/api/logos, and /api/file to fetch one logo download it found). The app itself runs in each person's browser;
 // client logos never come here. No dependencies beyond Node itself.
 
 import http from 'node:http';
@@ -8,6 +8,7 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { findLogos } from './find-logos.js';
+import { safeGet } from './safe-fetch.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT) || 8080;
@@ -31,6 +32,7 @@ const COMPRESS = /^(text\/|application\/(json|wasm|octet-stream)|image\/svg|font
 const PRIVATE = /^\/(server|tools|node_modules)\/|^\/(Dockerfile|Caddyfile|serve\.ps1|package(-lock)?\.json)$|\.(bat|command)$|\/\./;
 
 const gzCache = new Map();
+const gzip = (buf, opts) => new Promise((ok, fail) => zlib.gzip(buf, opts, (e, out) => e ? fail(e) : ok(out)));
 async function sendFile(req, res, urlPath) {
   let rel = decodeURIComponent(urlPath);
   if (rel.endsWith('/')) rel += 'index.html';
@@ -42,6 +44,8 @@ async function sendFile(req, res, urlPath) {
   if (!stat.isFile()) return notFound(res);
   const type = TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream';
   const headers = { 'content-type': type, 'x-content-type-options': 'nosniff' };
+  // the double-click copy of the app loads the EPS reader from here
+  if (rel.startsWith('/vendor/ghostscript/')) headers['access-control-allow-origin'] = '*';
   // a stamped link names one exact version, so it can be kept; anything else is rechecked
   const versioned = new URL(req.url, 'http://local').searchParams.get('v') === VERSION;
   headers['cache-control'] = versioned ? 'public, max-age=31536000, immutable'
@@ -54,8 +58,8 @@ async function sendFile(req, res, urlPath) {
   else if (/^\/js\/.+\.js$/.test(rel)) body = Buffer.from(stampJs(body.toString('utf8')));
   if (COMPRESS.test(type) && /\bgzip\b/.test(req.headers['accept-encoding'] || '') && body.length > 1024) {
     const key = file + etag;
-    if (!gzCache.has(key)) gzCache.set(key, zlib.gzipSync(body, { level: 7 }));
-    body = gzCache.get(key);
+    if (!gzCache.has(key)) gzCache.set(key, gzip(body, { level: 7 }));
+    body = await gzCache.get(key);
     headers['content-encoding'] = 'gzip';
     headers.vary = 'accept-encoding';
   }
@@ -86,6 +90,37 @@ function allowed(ip) {
   return recent.length <= 30;   // an office shares one address, so allow for a few people at once
 }
 
+// One logo download from a public website (a press-kit PDF, AI, EPS, SVG or
+// zip). Only those file types are passed on, judged by their content, so this
+// can't be used to fetch anything else.
+const FILE_KINDS = [
+  ['pdf', b => b.slice(0, 1024).includes('%PDF-')],           // PDF and PDF-based .ai
+  ['eps', b => b.slice(0, 4).equals(Buffer.from([0xc5, 0xd0, 0xd3, 0xc6])) || b.slice(0, 4).toString() === '%!PS'],
+  ['zip', b => b.slice(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))],
+  ['svgz', b => b[0] === 0x1f && b[1] === 0x8b],
+  ['svg', b => /<svg\b/i.test(b.slice(0, 4000).toString('utf8'))],
+];
+async function sendRemoteFile(res, target) {
+  const started = Date.now();
+  try {
+    const r = await safeGet(target, { maxBytes: 60_000_000, timeoutMs: 45_000 });
+    if (r.status >= 400) throw Object.assign(new Error(`The site answered ${r.status} for that file.`), { status: 502 });
+    const kind = (FILE_KINDS.find(([, test]) => test(r.body)) || [])[0];
+    if (!kind) throw Object.assign(new Error('That link isn\'t a logo file (PDF, AI, EPS, SVG or zip). The site may need you to sign in to download it.'), { status: 422 });
+    console.log(`file ${new URL(r.url).hostname} ${kind} ${(r.body.length / 1e6).toFixed(1)}MB in ${Date.now() - started}ms`);
+    res.writeHead(200, {
+      'content-type': 'application/octet-stream', 'content-length': r.body.length, 'cache-control': 'no-store',
+      'x-file-kind': kind, 'access-control-allow-origin': '*', 'access-control-expose-headers': 'x-file-kind',
+      'x-content-type-options': 'nosniff', 'content-disposition': 'attachment',
+    });
+    res.end(r.body);
+  } catch (e) {
+    console.log(`file failed: ${e.message}`);
+    const msg = e.status === 413 ? 'That file is over 60 MB, too big to open here. Download it from the site instead.' : e.message || 'The download failed.';
+    json(res, e.status && e.status < 600 ? e.status : 502, { error: msg });
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://local');
@@ -104,6 +139,13 @@ const server = http.createServer(async (req, res) => {
         console.log(`logos failed: ${e.message}`);
         return json(res, e.status && e.status < 600 ? e.status : 502, { error: e.message || 'The search failed.' });
       }
+    }
+    if (url.pathname === '/api/file') {
+      if (req.method === 'OPTIONS') { res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET' }); return res.end(); }
+      if (req.method !== 'GET') return json(res, 405, { error: 'Use GET.' });
+      const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+      if (!allowed(ip)) return json(res, 429, { error: 'Too many requests in a minute. Wait a moment and try again.' });
+      return sendRemoteFile(res, url.searchParams.get('url'));
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'Not allowed.' });
     if (url.pathname === '/healthz') return json(res, 200, { ok: true });

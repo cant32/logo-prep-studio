@@ -5,6 +5,9 @@ import { FONTS, addFontFile } from './text.js';
 import { METHODS, runChecks } from './checks.js';
 import { buildSVG, buildEPS, download, pngBlob, pdfBlob, separationsBlob } from './export.js';
 import { openPdf, inspectPage, imageData as pdfImage, pageSvg, renderPage } from './pdf.js';
+import { epsToPdf, sniff } from './eps.js';
+import { listZip, unzipEntry } from './zip.js';
+import { LIVE_SERVER } from './config.js';
 
 const $ = s => document.querySelector(s);
 const MAX_INPUT = 2400;       // larger images are scaled down before processing
@@ -48,11 +51,9 @@ async function loadFile(file) {
   state.name = (file.name || 'logo').replace(/\.[^.]+$/, '').replace(/[^\w-]+/g, '_') || 'logo';
   const name = file.name || '';
   $('#pdfChoice').hidden = true;
-  if (/\.eps$/i.test(name) || file.type === 'application/postscript' && !/\.ai$/i.test(name)) {
-    return toast('EPS files can\'t be opened in the browser. Ask for a PDF, AI, SVG or PNG, or save it as PDF from Illustrator.', 6000);
+  if (/\.(pdf|ai|eps|epsf|ps|svgz?|zip)$/i.test(name) || /pdf|postscript|illustrator|svg|zip/.test(file.type)) {
+    return openBytes(new Uint8Array(await file.arrayBuffer()), name);
   }
-  if (file.type === 'application/pdf' || /\.(pdf|ai)$/i.test(name)) return loadPdf(file);
-  if (file.type === 'image/svg+xml' || /\.svg$/i.test(name)) return loadSvg(await file.text(), file);
   const url = URL.createObjectURL(file);
   const img = new Image(); img.src = url;
   try { await img.decode(); } catch { URL.revokeObjectURL(url); toast('That file could not be read as an image.'); return; }
@@ -61,6 +62,97 @@ async function loadFile(file) {
   setSourceUrl(url);
   vectorCheck('raster', 'Pixel image, not vector: it will be traced to vector for print.');
   useImage(c.getContext('2d').getImageData(0, 0, c.width, c.height), name || 'Pasted image');
+}
+
+// PDF, AI, EPS, SVG or zip: what it really is comes from its first bytes,
+// since names lie (an .ai can be PDF inside or old PostScript; .eps may be either).
+async function openBytes(bytes, name) {
+  state.name = name.replace(/^.*\//, '').replace(/\.[^.]+$/, '').replace(/[^\w-]+/g, '_') || 'logo';
+  $('#pdfChoice').hidden = true;
+  const kind = sniff(bytes);
+  if (kind === 'pdf') return loadPdf(new File([bytes], name));
+  if (kind === 'eps') return loadEps(bytes, name);
+  if (kind === 'svg') return loadSvg(new TextDecoder().decode(bytes), { name });
+  if (kind === 'gzip') {   // .svgz: compressed SVG
+    const text = await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text().catch(() => '');
+    if (/<svg\b/i.test(text)) return loadSvg(text, { name });
+  }
+  if (kind === 'zip') return showZip(bytes, name);
+  if (/\.ai$/i.test(name)) return toast('This .ai file could not be read. Ask for a PDF, or re-save it in Illustrator with "Create PDF Compatible File" ticked.', 7000);
+  const blob = new Blob([bytes]), url = URL.createObjectURL(blob);
+  try {
+    const id = await decodeImage(url);
+    setSourceUrl(url);
+    vectorCheck('raster', 'Pixel image, not vector: it will be traced to vector for print.');
+    return useImage(id, name.replace(/^.*\//, ''));
+  } catch { URL.revokeObjectURL(url); }
+  toast('That file could not be read. Use a PDF, AI, EPS, SVG, PNG or JPG.', 5000);
+}
+
+// EPS is turned into PDF in the browser, then opened like any PDF.
+async function loadEps(bytes, name) {
+  const ai = /\.ai$/i.test(name);
+  progress(25, `Reading the ${ai ? 'Illustrator' : 'EPS'} file…`);
+  let pdf;
+  try { pdf = await epsToPdf(bytes); }
+  catch (e) {
+    console.error(e);
+    return toast(ai ? 'This old-format .ai file could not be read. Ask for a PDF, or re-save it in Illustrator with "Create PDF Compatible File" ticked.'
+      : e.message.includes('download') ? e.message : 'This EPS could not be read. Ask the client for a PDF or AI file instead.', 7000);
+  } finally { progress(null); }
+  return loadPdf(new File([pdf], name), { kind: ai ? 'Illustrator file' : 'EPS' });
+}
+
+// A zip (usually a brand pack): list the logo files in it to pick from.
+async function showZip(bytes, name) {
+  let entries;
+  try { entries = listZip(bytes); } catch (e) { return toast(e.message, 5000); }
+  const fmt = n => (n.match(/\.(ai|eps|pdf|svgz?|png|jpe?g)$/i) || [])[1];
+  const rank = e => ({ ai: 6, eps: 5, pdf: 4, svg: 3, svgz: 3, png: 2 }[fmt(e.name).toLowerCase()] || 1)
+    + (/logo|brand|mark/i.test(e.name) ? 3 : 0) - (/white|reverse|negative|knock|black|mono/i.test(e.name) ? 1 : 0);
+  const usable = entries.filter(e => fmt(e.name)).sort((a, b) => rank(b) - rank(a)).slice(0, 40);
+  const status = $('#webStatus'), box = $('#webResults');
+  status.hidden = false;
+  if (!usable.length) { status.textContent = `No logo files (AI, EPS, PDF, SVG, PNG) in ${name.replace(/^.*\//, '')}.`; box.hidden = true; return; }
+  status.textContent = `${usable.length} logo file${usable.length > 1 ? 's' : ''} in ${name.replace(/^.*\//, '')}${entries.length > usable.length ? ` (other files left out)` : ''}. Pick one: AI, EPS and PDF are the print masters.`;
+  box.innerHTML = '';
+  for (const e of usable) {
+    const f = fmt(e.name).toLowerCase().replace('svgz', 'svg').replace('jpeg', 'jpg');
+    const card = pickCard({ badge: f.toUpperCase(), kind: /ai|eps|pdf|svg/.test(f) ? 'Print file' : 'Picture', vector: /ai|eps|pdf|svg/.test(f), from: e.name.replace(/^.*\//, ''), title: e.name });
+    card.addEventListener('click', () => choose(card, async () => openBytes(await unzipEntry(bytes, e), e.name)));
+    // small previews for SVG and PNG
+    if (/svg|png|jpg/.test(f) && e.usize < 1_500_000) unzipEntry(bytes, e).then(d => {
+      if (f === 'svg' && sniff(d) !== 'svg') return;
+      showThumb(card, URL.createObjectURL(new Blob([d], { type: f === 'svg' ? 'image/svg+xml' : 'image/' + (f === 'jpg' ? 'jpeg' : 'png') })));
+    }).catch(() => {});
+    box.appendChild(card);
+  }
+  box.hidden = false;
+  $('#webResults').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+// One choice card in the results grid.
+function pickCard({ thumb, badge, kind, vector, from, title }) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'stk-pick ui';
+  b.innerHTML = `<span class="thumb"></span><span class="kind ${vector ? 'vector' : ''}"></span><span class="from"></span>`;
+  b.querySelector('.kind').textContent = kind;
+  b.querySelector('.from').textContent = from;
+  if (title) b.title = title;
+  if (thumb) showThumb(b, thumb);
+  else { const s = document.createElement('span'); s.className = 'fmt'; s.textContent = badge; b.querySelector('.thumb').appendChild(s); }
+  return b;
+}
+function showThumb(card, src) {
+  const t = card.querySelector('.thumb'), img = new Image();
+  img.alt = ''; img.src = src;
+  img.onload = () => { const badge = t.querySelector('.fmt'); if (badge) { badge.classList.add('corner'); } t.prepend(img); };
+}
+function choose(card, fn) {
+  $('#webResults').querySelectorAll('.stk-pick').forEach(x => x.classList.toggle('on', x === card));
+  card.classList.add('loading');
+  fn().catch(err => { console.error(err); toast('That one could not be opened: ' + err.message, 6000); })
+    .finally(() => card.classList.remove('loading'));
 }
 
 function setSourceUrl(url) {
@@ -158,7 +250,7 @@ async function rasteriseSvg(svg, size = 2000) {
 // The server fetches the site and suggests logos (a browser page can't read
 // other websites itself). The double-click copy of the app, or one run from
 // a local launcher, asks the live server instead.
-const LIVE_SERVER = 'https://logo-prep-studio-production.up.railway.app';
+
 
 async function searchSite(site) {
   const ask = async base => {
@@ -171,6 +263,18 @@ async function searchSite(site) {
   return (location.protocol.startsWith('http') && await ask('')) || ask(LIVE_SERVER);
 }
 
+// A download the search found (press-kit PDF, AI, EPS…), fetched by the
+// server because the browser isn't allowed to read other sites directly.
+async function fetchWebFile(url) {
+  const ask = async base => {
+    const r = await fetch(`${base}/api/file?url=${encodeURIComponent(url)}`);
+    if (r.status === 404 && base === '') return null;
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'The download failed.');
+    return new Uint8Array(await r.arrayBuffer());
+  };
+  return (location.protocol.startsWith('http') && await ask('')) || ask(LIVE_SERVER);
+}
+
 $('#webForm').addEventListener('submit', async e => {
   e.preventDefault();
   const site = $('#webUrl').value.trim(), status = $('#webStatus'), box = $('#webResults');
@@ -179,26 +283,34 @@ $('#webForm').addEventListener('submit', async e => {
   $('#webGo').disabled = true;
   try {
     const data = await searchSite(site);
-    if (!data.candidates.length) {
+    if (!data.candidates.length && !(data.files || []).length) {
       status.textContent = `No logo found on ${data.host}. Some sites only draw their logo with JavaScript: try the address of a page that shows it, or save the logo from the site and drop it in.`;
       return;
     }
+    const files = data.files || [];
     const vectors = data.candidates.filter(c => c.type === 'svg').length;
-    status.textContent = vectors
-      ? `Found ${data.candidates.length} on ${data.host}. Vector SVGs are marked in orange: pick the real logo. Check it's the current version before it goes to print.`
-      : `Found ${data.candidates.length} on ${data.host}, but no vector version: these are pictures and will be traced.`;
+    const pages = (data.brandPages || []).map(p => new URL(p.url).pathname).join(', ');
+    status.textContent = (files.length
+      ? `Found ${files.length} logo download${files.length > 1 ? 's' : ''}${pages ? ` (from ${pages})` : ''} and ${data.candidates.length} on the page. The AI, EPS and PDF downloads are usually the master print artwork.`
+      : vectors ? `Found ${data.candidates.length} on ${data.host}. Vector SVGs are marked in orange: pick the real logo.`
+      : `Found ${data.candidates.length} on ${data.host}, but no vector version: these are pictures and will be traced.`)
+      + ' Check it\'s the current version before it goes to print.';
+    for (const f of files) {
+      const card = pickCard({ badge: f.format.toUpperCase(), kind: f.format === 'zip' ? 'Logo pack' : 'Print file', vector: true, from: `${f.name} · ${f.source}`, title: f.url });
+      card.addEventListener('click', () => choose(card, async () => {
+        status.textContent = `Downloading ${f.name}…`;
+        const bytes = await fetchWebFile(f.url);
+        status.textContent = `Opened ${f.name} from ${data.host}. Check it's the current version before it goes to print.`;
+        await openBytes(bytes, f.name);
+      }));
+      box.appendChild(card);
+    }
     data.candidates.forEach((c, i) => {
-      const b = document.createElement('button');
-      b.type = 'button'; b.className = 'stk-pick ui';
       const src = c.type === 'svg' ? URL.createObjectURL(new Blob([c.svg], { type: 'image/svg+xml' })) : c.dataUrl;
-      b.innerHTML = `<span class="thumb"><img alt="" src="${src}"></span><span class="kind ${c.type === 'svg' ? 'vector' : ''}">${c.type === 'svg' ? 'Vector SVG' : 'Picture'}</span><span class="from"></span>`;
-      b.querySelector('.from').textContent = c.source;
-      b.querySelector('img').alt = `Option ${i + 1} from ${data.host}`;
-      b.addEventListener('click', () => {
-        box.querySelectorAll('.stk-pick').forEach(x => x.classList.toggle('on', x === b));
-        useWebLogo(c, data.host).catch(err => { console.error(err); toast('That one could not be opened: ' + err.message, 5000); });
-      });
-      box.appendChild(b);
+      const card = pickCard({ thumb: src, kind: c.type === 'svg' ? 'Vector SVG' : 'Picture', vector: c.type === 'svg', from: c.source });
+      card.querySelector('.thumb').dataset.alt = `Option ${i + 1} from ${data.host}`;
+      card.addEventListener('click', () => choose(card, () => useWebLogo(c, data.host)));
+      box.appendChild(card);
     });
     box.hidden = false;
   } catch (err) {
@@ -221,14 +333,14 @@ async function useWebLogo(c, host) {
 
 // PDF / AI ------------------------------------------------------------------
 
-async function loadPdf(file) {
+async function loadPdf(file, { kind } = {}) {
   let doc;
   try { doc = await openPdf(await file.arrayBuffer()); }
   catch (e) {
     console.error(e);
     return toast(/\.ai$/i.test(file.name) ? 'This .ai file has no PDF inside it (old Illustrator format). Re-save it with "Create PDF Compatible File" ticked, or export a PDF or SVG.' : 'That PDF could not be read.', 7000);
   }
-  state.pdf = { doc, file };
+  state.pdf = { doc, file, kind };
   const sel = $('#pdfPage'); sel.innerHTML = '';
   for (let i = 1; i <= doc.numPages; i++) sel.add(new Option(`Page ${i} of ${doc.numPages}`, i));
   $('#pdfPages').hidden = doc.numPages < 2;
@@ -239,7 +351,7 @@ async function showPdfPage(n, auto) {
   const { doc, file } = state.pdf;
   const info = await inspectPage(doc, n);
   state.pdf.info = info;
-  const kind = /\.ai$/i.test(file.name) ? 'Illustrator file' : 'PDF';
+  const kind = state.pdf.kind || (/\.ai$/i.test(file.name) ? 'Illustrator file' : 'PDF');
   const pics = info.images.map(i => `${i.width} × ${i.height} px`).join(', ');
   if (info.images.length && info.paths < 4) vectorCheck('warn', `Not true vector: the logo in this ${kind} is a picture (${pics}). Use the picture below to trace it to real vector.`);
   else if (info.images.length) vectorCheck('warn', `Mixed: vector shapes plus ${info.images.length} pasted-in picture${info.images.length > 1 ? 's' : ''} (${pics}). Suppliers may reject the pictures.`);
@@ -254,7 +366,7 @@ async function showPdfPage(n, auto) {
     box.appendChild(b);
     return fn;
   };
-  const label = `${file.name}${doc.numPages > 1 ? ` (page ${n})` : ''}`;
+  const label = `${file.name.replace(/^.*\//, '')}${doc.numPages > 1 ? ` (page ${n})` : ''}`;
   const actions = {};
   if (info.paths) actions.vector = add('Use the vector artwork', 'Keeps the original shapes exactly, no tracing', async () => {
     setSourceUrl(imageDataUrl(await renderPage(info.page, 600)));
@@ -618,7 +730,7 @@ const refreshExportSoon = debounce(refreshExport, 400);
 ['#method', '#widthMm', '#mirror'].forEach(s => $(s).addEventListener('input', refreshExportSoon));
 
 function saveEps(name, r) {
-  if (r.skipped.length) toast(`EPS saved without ${r.skipped.join(', ')} items (pictures or live text). Use SVG or PDF for those.`, 5000);
+  if (r.skipped.length) toast(`EPS saved without ${r.skipped.join(', ')} items (pictures or live text). Use PDF for those.`, 5000);
   return download(name, r.eps, 'application/postscript');
 }
 

@@ -28,7 +28,7 @@ Use Chrome or Edge. A computer with a graphics card makes the AI upscaling fast 
    - **Is it actually vector?** Every file gets a check. True vector SVG, PDF and AI files go straight to editing with their original shapes. A "vector" file that is really a picture pasted inside (common with client PDFs) is flagged, and the picture is pulled out at full resolution and traced.
    - **PDF / AI choices:** use the vector artwork, use an embedded picture, or trace the whole page. Multi-page PDFs get a page picker. A white page-sized background behind the logo is removed automatically.
    - **Crop** to keep just part of an image (e.g. a logo on a letterhead).
-   - **Find it on their website:** type the client's web address and the tool suggests logos from the site (vector SVGs first, then icons and pictures). This runs on the server, because a browser page can't read other websites; the double-click copy uses the live server for it. Sites that draw their logo only with JavaScript may show just their icons.
+   - **Find it on their website:** type the client's web address and the tool suggests logos from the site. It also follows the site's press / brand / media-kit pages (or tries the usual addresses such as `/press` and `/brand`) and lists the logo downloads there (AI, EPS, PDF, SVG, SVGZ, zip packs) first, because those are usually the master print artwork. Menus, brochures and other PDFs are left out. Picking a download fetches it through the server and opens it like a dropped file; a zip pack lists the logo files inside it. This runs on the server, because a browser page can't read other websites; the double-click copy uses the live server for it. Sites that draw their logo only with JavaScript may show just their icons.
 2. **Enhance & vectorise** (runs automatically). **Quick presets** set everything in one click: *Screen print · 2 colours*, *Screen print · all colours*, *Full colour · DTG / DTF*, *One colour · engrave / vinyl*.
    - **AI upscale**: Real-CUGAN rebuilds sharp edges from small or JPEG-damaged images. "Auto" upscales 4× for images under 500 px and 2× under 1000 px.
    - **Colour clean-up**: finds the logo's flat inks, removes JPEG haze, blurred edges and specks, and snaps every pixel to an exact ink.
@@ -58,7 +58,7 @@ The preview bar shows the design on white, black, navy, grey, red or any custom 
 
 - Text only a few pixels tall in the original, like a tagline under a 120 px logo, can't be recovered by any tool. Retype it with the Text tool.
 - Photographic logos and gradients are converted to flat colour areas (the screen-print approach). For DTG, use the original image if it's already high resolution.
-- EPS files can't be opened in a browser; ask for PDF, AI, SVG or PNG instead. Very old .ai files (saved without "PDF Compatible") can't be opened either.
+- EPS files (and old PostScript-based .ai files) are converted to PDF inside the browser with Ghostscript, so they open like any PDF and still never leave the computer. The reader is 16 MB and loads the first time an EPS is opened; the double-click copy downloads it from the live server, so it needs the internet for EPS.
 - Background removal works on solid-colour backgrounds. A logo on a photo needs cropping, or erasing the leftover shapes by hand.
 - Embroidery still needs digitising into stitches by your digitiser or embroidery software.
 
@@ -66,7 +66,7 @@ The preview bar shows the design on white, black, navy, grey, red or any custom 
 
 Everything runs from this folder, with no internet needed once it's loaded:
 
-- `js/`: the app (`trace.js` colour clean-up and tracing, `upscale.js` AI upscaling, `pdf.js` PDF/AI reading, `editor.js` canvas, `text.js` outlined text, `export.js` PDF/EPS/PNG files, `checks.js` print checks)
+- `js/`: the app (`trace.js` colour clean-up and tracing, `upscale.js` AI upscaling, `pdf.js` PDF/AI reading, `eps.js` EPS reading, `zip.js` brand packs, `editor.js` canvas, `text.js` outlined text, `export.js` PDF/EPS/PNG files, `checks.js` print checks)
 - `tools/build-single.py`: rebuilds `Logo Prep Studio.html` from the source
 - `vendor/`: third-party libraries and AI models (see `LICENSES.md`)
 - `fonts/`: open-licence fonts for the Text tool and the interface

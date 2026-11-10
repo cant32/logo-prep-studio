@@ -11,6 +11,14 @@ import { findLogos } from './find-logos.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT) || 8080;
+// Every deploy gets its own version stamp on the app's file links, so a
+// browser can never mix cached code from an older version with a new page.
+const VERSION = String(process.env.RAILWAY_GIT_COMMIT_SHA || Date.now().toString(36)).slice(0, 12);
+const stamp = u => /^(https?:|data:|blob:|#|\/\/)/.test(u) || u.includes('?') ? u : `${u}?v=${VERSION}`;
+// index.html: the page's own stylesheets, scripts and logo
+const stampHtml = html => html.replace(/(\s(?:src|href)=")((?:css|js|vendor)\/[^"]+)"/g, (m, a, u) => `${a}${stamp(u)}"`);
+// the app's modules: their imports of each other and of vendor code
+const stampJs = js => js.replace(/(\bfrom\s*['"]|\bimport\s*\(\s*['"])(\.{1,2}\/[^'"]+\.js)(['"])/g, (m, a, u, b) => `${a}${stamp(u)}${b}`);
 
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
@@ -34,11 +42,16 @@ async function sendFile(req, res, urlPath) {
   if (!stat.isFile()) return notFound(res);
   const type = TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream';
   const headers = { 'content-type': type, 'x-content-type-options': 'nosniff' };
-  headers['cache-control'] = /^\/(vendor|fonts|css)\//.test(rel) ? 'public, max-age=604800' : 'no-cache';
-  const etag = `"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`;
+  // a stamped link names one exact version, so it can be kept; anything else is rechecked
+  const versioned = new URL(req.url, 'http://local').searchParams.get('v') === VERSION;
+  headers['cache-control'] = versioned ? 'public, max-age=31536000, immutable'
+    : /^\/(vendor|fonts)\//.test(rel) ? 'public, max-age=604800' : 'no-cache';
+  const etag = `"${VERSION}-${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`;
   headers.etag = etag;
   if (req.headers['if-none-match'] === etag) { res.writeHead(304, headers); return res.end(); }
   let body = await fs.readFile(file);
+  if (rel === '/index.html') body = Buffer.from(stampHtml(body.toString('utf8')));
+  else if (/^\/js\/.+\.js$/.test(rel)) body = Buffer.from(stampJs(body.toString('utf8')));
   if (COMPRESS.test(type) && /\bgzip\b/.test(req.headers['accept-encoding'] || '') && body.length > 1024) {
     const key = file + etag;
     if (!gzCache.has(key)) gzCache.set(key, zlib.gzipSync(body, { level: 7 }));

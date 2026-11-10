@@ -92,6 +92,16 @@ export async function findLogos(siteUrl) {
     add(url, { kind: isSvg ? 'svg-url' : 'image-url', source: 'Image on the page', score, url });
   }
 
+  // 2b. links straight to .svg files (download links, file listings)
+  for (const m of html.matchAll(/<a\b[^>]*>/gi)) {
+    const href = attr(m[0], 'href');
+    if (!/\.svgz?(\?|#|$)/i.test(href)) continue;
+    const url = abs(href); if (!url) continue;
+    const label = [href, attr(m[0], 'title'), attr(m[0], 'class'), html.slice(m.index, m.index + 300).replace(/<[^>]+>/g, ' ')].join(' ');
+    const score = 30 + (looksLogo(label) ? 40 : 0) + (new RegExp(brandWord, 'i').test(label) ? 15 : 0) - m.index / html.length * 10;
+    add(url, { kind: 'svg-url', source: 'Linked SVG file', score, url });
+  }
+
   // 3. icons and share images in <head>
   for (const m of html.matchAll(/<link\b[^>]*>/gi)) {
     const tag = m[0], rel = attr(tag, 'rel').toLowerCase(), href = attr(tag, 'href');

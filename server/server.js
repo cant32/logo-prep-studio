@@ -9,6 +9,7 @@ import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { findLogos } from './find-logos.js';
 import { safeGet } from './safe-fetch.js';
+import { getStats, count } from './stats.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.PORT) || 8080;
@@ -121,9 +122,27 @@ async function sendRemoteFile(res, target) {
   }
 }
 
+// counter events: a few per person per minute at most, so a stuck page can't inflate them
+const statHits = new Map();
+function statAllowed(ip) {
+  const now = Date.now(), recent = (statHits.get(ip) || []).filter(t => now - t < 60_000);
+  recent.push(now); statHits.set(ip, recent);
+  if (statHits.size > 5000) for (const [k, v] of statHits) if (now - v[v.length - 1] > 60_000) statHits.delete(k);
+  return recent.length <= 120;
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://local');
+    if (url.pathname === '/api/stats') {
+      if (req.method === 'OPTIONS') { res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST' }); return res.end(); }
+      if (req.method === 'POST') {
+        const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+        const event = url.searchParams.get('e');
+        if (statAllowed(ip)) count(event);
+      }
+      return json(res, 200, getStats());
+    }
     if (url.pathname === '/api/logos') {
       if (req.method === 'OPTIONS') { res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET' }); return res.end(); }
       if (req.method !== 'GET') return json(res, 405, { error: 'Use GET.' });

@@ -176,6 +176,9 @@ input[type=color] { width: 40px; height: 36px; padding: 2px; border: var(--borde
 .swatch.custom { position: relative; display: inline-block; overflow: hidden; background: conic-gradient(#e33, #ee3, #3e3, #3ee, #33e, #e3e, #e33); }
 .swatch.custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .canvasHost { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+.statbar { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-4); margin: 0; padding: var(--space-1) var(--space-4); background: var(--av-navy-deep); border-top: 1px solid var(--line); color: var(--muted); font-size: var(--text-xs); letter-spacing: var(--tracking-body); }
+.statbar[hidden] { display: none; }
+.statbar b { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
 .canvasHost.checker { background: repeating-conic-gradient(#e9e9e9 0 25%, #fff 0 50%) 0 0 / 20px 20px; }
 #compareImg { position: absolute; pointer-events: none; opacity: .55; image-rendering: pixelated; }
 

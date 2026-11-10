@@ -5,3 +5,4 @@ tools
 serve.ps1
 *.bat
 *.command
+stats.json

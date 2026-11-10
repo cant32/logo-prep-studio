@@ -8,6 +8,7 @@ import { openPdf, inspectPage, imageData as pdfImage, pageSvg, renderPage } from
 import { epsToPdf, sniff } from './eps.js';
 import { listZip, unzipEntry } from './zip.js';
 import { LIVE_SERVER } from './config.js';
+import { loadStats, countLoad } from './stats.js';
 
 const $ = s => document.querySelector(s);
 const MAX_INPUT = 2400;       // larger images are scaled down before processing
@@ -43,6 +44,9 @@ const editor = new Editor($('#canvas'), $('#canvasHost'), {
   onChange: () => { $('#undo').disabled = editor.history.length < 2; renderInks(); renderLiveText(); refreshExportSoon(); },
   onSelect: obj => showTextProps(obj && obj.isText ? obj : null),
 });
+
+loadStats();
+setInterval(() => { if (!document.hidden) loadStats(); }, 60_000);
 
 if (new URLSearchParams(location.search).has('debug')) globalThis.lpsEditor = editor;   // for tests
 
@@ -162,8 +166,18 @@ function setSourceUrl(url) {
   state.sourceUrl = url;
 }
 
+// One more logo for the counter, once per source file (switching between a
+// PDF's options, or re-running, isn't a new logo).
+function counted(label) {
+  const key = String(label).replace(/ \(page \d+\)$/, '');
+  if (state.countedAs === key) return;
+  state.countedAs = key;
+  countLoad();
+}
+
 // Start the enhance + trace pipeline on a raster image.
 function useImage(id, label, note = '') {
+  counted(label);
   const s = Math.min(1, MAX_INPUT / Math.max(id.width, id.height));
   if (s < 1) id = resize(id, Math.round(id.width * s), Math.round(id.height * s));
   state.original = id;
@@ -193,6 +207,7 @@ function vectorCheck(kind, text) {
 
 // Vector artwork goes straight into the editor, no tracing.
 async function useVector(svg, label, info) {
+  counted(label);
   $('#gradientNote').hidden = true;
   state.original = null;
   $('#cropBtn').hidden = true;

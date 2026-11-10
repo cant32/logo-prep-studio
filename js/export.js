@@ -1,6 +1,7 @@
 // Print-ready exports. Everything is sized in real millimetres from the
 // print width the user enters; vector files keep one group per ink.
 
+import { countDownload } from './stats.js';
 import { util } from '../vendor/fabric.min.js';
 import { normColor } from './editor.js';
 
@@ -56,7 +57,7 @@ export async function download(name, data, type) {
   const blob = data instanceof Blob ? data : new Blob([data], { type });
   const host = await hostDownloads;
   if (host) {
-    try { await host.save({ filename: name, data: blob }); return 'saved'; }
+    try { await host.save({ filename: name, data: blob }); countDownload(); return 'saved'; }
     catch (e) { if (e && e.code === 'declined') return 'declined'; throw new Error(e?.message || 'the file could not be saved'); }
   }
   const a = document.createElement('a');
@@ -64,6 +65,7 @@ export async function download(name, data, type) {
   a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  countDownload();
 }
 
 export async function svgToCanvas(svg, w, h) {

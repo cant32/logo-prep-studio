@@ -37,7 +37,7 @@ function progress(pct, text) {
 // ---------------------------------------------------------------- editor
 
 const editor = new Editor($('#canvas'), $('#canvasHost'), {
-  onChange: () => { $('#undo').disabled = editor.history.length < 2; renderInks(); refreshExportSoon(); },
+  onChange: () => { $('#undo').disabled = editor.history.length < 2; renderInks(); renderLiveText(); refreshExportSoon(); },
   onSelect: obj => showTextProps(obj && obj.isText ? obj : null),
 });
 
@@ -152,6 +152,71 @@ async function rasteriseSvg(svg, size = 2000) {
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
   URL.revokeObjectURL(img.src);
   return c.getContext('2d').getImageData(0, 0, c.width, c.height);
+}
+
+// Website search ------------------------------------------------------------
+// The server fetches the site and suggests logos (a browser page can't read
+// other websites itself). The double-click copy of the app, or one run from
+// a local launcher, asks the live server instead.
+const LIVE_SERVER = 'https://logo-prep-studio-production.up.railway.app';
+
+async function searchSite(site) {
+  const ask = async base => {
+    const r = await fetch(`${base}/api/logos?url=${encodeURIComponent(site)}`);
+    if (r.status === 404 && base === '') return null;   // no search on this server: try the live one
+    const data = await r.json().catch(() => ({ error: 'The search service gave an unreadable answer.' }));
+    if (!r.ok) throw new Error(data.error || 'The search failed.');
+    return data;
+  };
+  return (location.protocol.startsWith('http') && await ask('')) || ask(LIVE_SERVER);
+}
+
+$('#webForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const site = $('#webUrl').value.trim(), status = $('#webStatus'), box = $('#webResults');
+  if (!site) { $('#webUrl').focus(); return; }
+  status.hidden = false; status.textContent = 'Searching the site…'; box.hidden = true; box.innerHTML = '';
+  $('#webGo').disabled = true;
+  try {
+    const data = await searchSite(site);
+    if (!data.candidates.length) {
+      status.textContent = `No logo found on ${data.host}. Some sites only draw their logo with JavaScript: try the address of a page that shows it, or save the logo from the site and drop it in.`;
+      return;
+    }
+    const vectors = data.candidates.filter(c => c.type === 'svg').length;
+    status.textContent = vectors
+      ? `Found ${data.candidates.length} on ${data.host}. Vector SVGs are marked in orange: pick the real logo. Check it's the current version before it goes to print.`
+      : `Found ${data.candidates.length} on ${data.host}, but no vector version: these are pictures and will be traced.`;
+    data.candidates.forEach((c, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'stk-pick ui';
+      const src = c.type === 'svg' ? URL.createObjectURL(new Blob([c.svg], { type: 'image/svg+xml' })) : c.dataUrl;
+      b.innerHTML = `<span class="thumb"><img alt="" src="${src}"></span><span class="kind ${c.type === 'svg' ? 'vector' : ''}">${c.type === 'svg' ? 'Vector SVG' : 'Picture'}</span><span class="from"></span>`;
+      b.querySelector('.from').textContent = c.source;
+      b.querySelector('img').alt = `Option ${i + 1} from ${data.host}`;
+      b.addEventListener('click', () => {
+        box.querySelectorAll('.stk-pick').forEach(x => x.classList.toggle('on', x === b));
+        useWebLogo(c, data.host).catch(err => { console.error(err); toast('That one could not be opened: ' + err.message, 5000); });
+      });
+      box.appendChild(b);
+    });
+    box.hidden = false;
+  } catch (err) {
+    status.textContent = /fetch|network/i.test(err.message) ? 'The search service couldn\'t be reached. Check the internet connection.' : err.message;
+  } finally {
+    $('#webGo').disabled = false;
+  }
+});
+
+async function useWebLogo(c, host) {
+  const name = host.replace(/[^\w-]+/g, '_');
+  state.name = name;
+  $('#pdfChoice').hidden = true;
+  if (c.type === 'svg') return loadSvg(c.svg, { name: `${host} logo.svg` });
+  const id = await decodeImage(c.dataUrl);
+  setSourceUrl(c.dataUrl);
+  vectorCheck('raster', 'Picture from the website, not vector: it will be traced to vector for print.');
+  useImage(id, `${host} logo`, ' · from the website');
 }
 
 // PDF / AI ------------------------------------------------------------------
@@ -329,14 +394,44 @@ function renderInks() {
     li.classList.toggle('off', ink.hidden);
     li.innerHTML = `<input type="checkbox" ${ink.hidden ? '' : 'checked'} aria-label="Print ${ink.color}">
       <label class="chip" style="background:${ink.color}"><input type="color" value="${ink.color}" aria-label="Change ${ink.color}"></label>
-      <code>${ink.color.toUpperCase()}</code><span class="meta">${ink.count} shape${ink.count > 1 ? 's' : ''}</span>`;
+      <input type="text" class="hex" value="${ink.color.toUpperCase()}" maxlength="7" spellcheck="false" aria-label="Hex code for ${ink.color}"><span class="meta">${ink.count} shape${ink.count > 1 ? 's' : ''}</span>`;
     li.querySelector('input[type=checkbox]').addEventListener('change', e => editor.setInkHidden(ink.color, !e.target.checked));
     const pick = li.querySelector('input[type=color]');
     pick.addEventListener('input', e => { li.querySelector('.chip').style.background = e.target.value; });
     pick.addEventListener('change', e => editor.recolor(ink.color, e.target.value));
+    // type an exact colour (e.g. the client's brand hex); applied on Enter or leaving the box
+    const hexBox = li.querySelector('.hex');
+    const applyHex = () => {
+      let v = hexBox.value.trim().replace(/^#?/, '#');
+      if (/^#[0-9a-f]{3}$/i.test(v)) v = '#' + [...v.slice(1)].map(c => c + c).join('');
+      if (!/^#[0-9a-f]{6}$/i.test(v)) { hexBox.value = ink.color.toUpperCase(); if (hexBox.value !== v.toUpperCase()) toast('Type a colour as a 6-digit hex code, like #FF7712.'); return; }
+      if (v.toLowerCase() !== ink.color) editor.recolor(ink.color, v);
+    };
+    hexBox.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); applyHex(); } else if (e.key === 'Escape') hexBox.value = ink.color.toUpperCase(); });
+    hexBox.addEventListener('change', applyHex);
     list.appendChild(li);
   }
 }
+// Live text from imported artwork: offer to outline it.
+function renderLiveText() {
+  const texts = editor.liveTexts();
+  $('#liveText').hidden = !texts.length;
+  if (!texts.length) return;
+  const fonts = [...new Set(texts.map(t => String(t.fontFamily).split(',')[0].replace(/['"]/g, '').trim()))];
+  $('#liveTextNote').textContent = `This artwork has live text in ${fonts.join(', ')}. Printers may not have ${fonts.length > 1 ? 'these fonts' : 'that font'}, so convert it to curves before exporting.`;
+}
+$('#outlineText').addEventListener('click', async () => {
+  const btn = $('#outlineText'); btn.disabled = true;
+  try {
+    const r = await editor.convertLiveText({ askComputer: true });
+    if (r.missing.length) {
+      openStep('#step-text');
+      toast(`${r.done.length ? `Converted ${r.done.length}. ` : ''}Font not found: ${r.missing.join(', ')}. Load its font file in the Text step ("Use your own font file"), then convert again.`, 8000);
+    } else if (r.done.length) toast(`Converted ${r.done.length} text item${r.done.length > 1 ? 's' : ''} to curves (${[...new Set(r.done)].join(', ')}).`);
+  } catch (e) { console.error(e); toast('Converting the text failed: ' + e.message, 5000); }
+  finally { btn.disabled = false; }
+});
+
 $('#oneColour').addEventListener('click', () => {
   const to = normColor($('#oneColourPick').value);
   for (const ink of editor.inks()) if (!ink.hidden) editor.recolor(ink.color, to);
@@ -512,7 +607,7 @@ async function refreshExport() {
   }
   const res = await runChecks(built, method);
   const live = [...new Set(editor.leaves().filter(o => o.visible && /text/i.test(o.type || '')).map(o => o.fontFamily))];
-  if (live.length) res.issues.push({ level: 'warn', text: `This SVG has live text (${live.join(', ')}). The printer may not have that font: retype it with the Text tool, or outline it in your design app first.` });
+  if (live.length) res.issues.push({ level: 'warn', text: `This artwork still has live text (${live.join(', ')}). The printer may not have that font: use "Convert text to curves" in Colours first.` });
   if ($('#mirror').checked) res.issues = res.issues.filter(i => !/tick \"Mirror\"/.test(i.text));
   $('#checks').innerHTML = res.issues.map(i => `<div class="${i.level}">${i.text}</div>`).join('');
   const img = $('#checkPreview');

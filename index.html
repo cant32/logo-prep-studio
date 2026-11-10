@@ -36,6 +36,14 @@
           <span>or click to choose · or paste (Ctrl+V)</span>
           <small>PNG, JPG, WebP, SVG, PDF or AI</small>
         </label>
+        <form class="websearch" id="webForm" novalidate>
+          <div class="field">
+            <label for="webUrl">Or find it on their website</label>
+            <div class="inputrow"><input type="text" id="webUrl" placeholder="e.g. harbourcoffee.ie" inputmode="url" autocomplete="url" spellcheck="false"><button class="stk-btn primary small" type="submit" id="webGo">Search</button></div>
+          </div>
+          <p class="stk-note" id="webStatus" role="status" hidden></p>
+          <div class="webresults" id="webResults" hidden></div>
+        </form>
         <div class="source" id="source" hidden>
           <img id="sourceImg" alt="Original logo">
           <div><b id="sourceName"></b><span id="sourceInfo"></span></div>
@@ -99,7 +107,7 @@
     <section class="step" id="step-colours" data-disabled>
       <h2 class="stk-section"><span class="n">3</span>Colours</h2>
       <div class="body">
-        <p class="stk-note">Click a colour to change it. Untick to knock it out (the garment shows through).</p>
+        <p class="stk-note">Click a swatch, or type an exact hex code, to change a colour. Untick to knock it out (the garment shows through).</p>
         <ul class="inks" id="inkList"></ul>
         <div class="row">
           <button class="stk-btn ghost small" id="oneColour">Make one colour</button>
@@ -111,6 +119,10 @@
           <input type="color" id="paintPick" value="#000000" aria-label="Paint colour">
         </div>
         <div class="inkchips paintchips" id="paintInks" aria-label="Paint with a logo colour"></div>
+        <div class="livetext" id="liveText" hidden>
+          <p class="stk-note" id="liveTextNote"></p>
+          <div class="row"><button class="stk-btn outline small" id="outlineText">Convert text to curves</button></div>
+        </div>
         <p class="stk-note">Erase: click stray bits to delete them. Paint: click a shape to give it the paint colour (fixes speckles or breaks in thin lines).</p>
       </div>
     </section>

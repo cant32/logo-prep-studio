@@ -87,3 +87,78 @@ export function layoutText(font, text, { size = 72, spacing = 0, curve = 0 } = {
   }
   return parts.join('');
 }
+
+// ---------------------------------------------------------------- live text → curves
+// Text that arrives inside a client's SVG is live text: it only prints right
+// if the printer has the font. These helpers find the actual font and turn
+// the text into outlines.
+
+const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const firstFamily = css => String(css || '').split(',')[0].trim().replace(/^['"]|['"]$/g, '');
+const WEIGHTS = { thin: 100, hairline: 100, extralight: 200, ultralight: 200, light: 300, book: 400, regular: 400, normal: 400, roman: 400, medium: 500, semibold: 600, demibold: 600, bold: 700, extrabold: 800, ultrabold: 800, black: 900, heavy: 900 };
+const weightOf = label => { const w = norm(label).replace('italic', ''); return WEIGHTS[w] ?? 400; };
+const cssWeight = w => w === 'bold' ? 700 : w === 'normal' || !w ? 400 : Number(w) || 400;
+
+let localFonts = null;   // Chrome's installed-font list, asked for once
+async function installedFonts() {
+  if (localFonts) return localFonts;
+  if (typeof window.queryLocalFonts !== 'function') return (localFonts = []);
+  // a person may ignore Chrome's prompt; don't wait forever
+  const timeout = new Promise(r => setTimeout(() => r(null), 30000));
+  try { localFonts = await Promise.race([window.queryLocalFonts(), timeout]); } catch { localFonts = null; }
+  if (!localFonts) { localFonts = null; return []; }
+  return localFonts;
+}
+
+// The font file for a CSS family / weight / style, or null. `askComputer`
+// allows the installed-font lookup (Chrome asks the person first).
+export async function resolveFont(family, weight, style, { askComputer = false } = {}) {
+  const fam = firstFamily(family), target = norm(fam), wNum = cssWeight(weight), italic = /italic|oblique/i.test(style || '') || /italic/i.test(fam);
+  // 1. the app's own and uploaded fonts: exact "family + style" names first (GothamRounded-Medium), then family + nearest weight
+  for (const e of FONTS) for (const [label, file] of Object.entries(e.weights)) {
+    if (norm(e.name + label) === target || norm(e.name + '-' + label) === target) return { font: await loadFont(file), name: `${e.name} ${label}` };
+  }
+  const entry = FONTS.find(e => norm(e.name) === target || target.startsWith(norm(e.name)) && WEIGHTS[target.slice(norm(e.name).length).replace('italic', '')] !== undefined);
+  if (entry) {
+    const wanted = target === norm(entry.name) ? wNum : weightOf(target.slice(norm(entry.name).length));
+    const options = Object.entries(entry.weights).map(([label, file]) => ({ label, file, w: weightOf(label), it: /italic/i.test(label) }));
+    options.sort((a, b) => (a.it !== italic) - (b.it !== italic) || Math.abs(a.w - wanted) - Math.abs(b.w - wanted));
+    return { font: await loadFont(options[0].file), name: `${entry.name} ${options[0].label}` };
+  }
+  // 2. fonts installed on this computer (Chrome, with permission)
+  if (askComputer) {
+    const fonts = await installedFonts();
+    const exact = fonts.find(f => norm(f.postscriptName) === target || norm(f.fullName) === target);
+    const byFamily = fonts.filter(f => norm(f.family) === target)
+      .sort((a, b) => (/italic|oblique/i.test(a.style) !== italic) - (/italic|oblique/i.test(b.style) !== italic) || Math.abs(weightOf(a.style) - wNum) - Math.abs(weightOf(b.style) - wNum));
+    const pick = exact || byFamily[0];
+    if (pick) return { font: parse(await (await pick.blob()).arrayBuffer()), name: pick.fullName };
+  }
+  return null;
+}
+
+// Outline for one line-or-more Fabric text object, in the object's own
+// coordinates (origin at its centre), laid out with the real font's metrics.
+export function outlineText(font, obj) {
+  const size = obj.fontSize, scale = size / font.unitsPerEm;
+  const spacing = (obj.charSpacing || 0) / 1000 * size;
+  const lines = String(obj.text).split('\n');
+  const lineH = size * (obj.lineHeight || 1.16) * (obj._fontSizeMult || 1.13);
+  const ascent = size * (obj._fontSizeMult || 1.13) * (1 - (obj._fontSizeFraction ?? 0.222));
+  const parts = [];
+  lines.forEach((line, i) => {
+    const glyphs = font.stringToGlyphs(line);
+    let width = 0;
+    glyphs.forEach((g, k) => { width += g.advanceWidth * scale + (k < glyphs.length - 1 ? spacing + font.getKerningValue(g, glyphs[k + 1]) * scale : 0); });
+    const half = obj.width / 2;
+    const align = obj.textAlign || 'left';
+    let x = align === 'center' ? -width / 2 : align === 'right' || align === 'end' ? half - width : -half;
+    const baseline = -obj.height / 2 + i * lineH + ascent;
+    glyphs.forEach((g, k) => {
+      const d = g.getPath(x, baseline, size).toPathData(2);
+      if (d) parts.push(d);
+      x += g.advanceWidth * scale + spacing + (k < glyphs.length - 1 ? font.getKerningValue(g, glyphs[k + 1]) * scale : 0);
+    });
+  });
+  return parts.join('');
+}

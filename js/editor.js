@@ -6,7 +6,7 @@ import { Canvas, Group, Path, Point, Color, FabricObject, loadSVGFromString, uti
 
 // selection handles in brand orange
 Object.assign(FabricObject.ownDefaults, { borderColor: '#e87928', cornerColor: '#e87928', cornerStrokeColor: '#24272c', cornerStyle: 'circle', transparentCorners: false, cornerSize: 11, borderScaleFactor: 1.5 });
-import { layoutText, loadFont } from './text.js';
+import { layoutText, loadFont, resolveFont, outlineText } from './text.js';
 
 const KEEP = ['isLogo', 'isText', 'textProps', 'subTargetCheck', 'inkLocked'];
 
@@ -138,6 +138,39 @@ export class Editor {
     };
     this.canvas.getObjects().forEach(walk);
     return out;
+  }
+
+  // Live text that came in with the artwork (not our outlined Text tool paths).
+  liveTexts() {
+    return this.leaves().filter(o => typeof o.text === 'string' && !o.isText);
+  }
+
+  // Replace live text with outlines. The app's own fonts go first; only the
+  // leftovers ask for the computer's installed fonts (a permission prompt in
+  // Chrome). Returns { done: [font names], missing: [font names] }.
+  async convertLiveText({ askComputer = false } = {}) {
+    const done = [];
+    const pass = async computer => {
+      for (const t of this.liveTexts()) {
+        const found = await resolveFont(t.fontFamily, t.fontWeight, t.fontStyle, { askComputer: computer });
+        if (!found) continue;
+        const d = outlineText(found.font, t);
+        if (!d) continue;
+        const p = new Path(d, { fill: t.fill, stroke: t.stroke, strokeWidth: t.strokeWidth, opacity: t.opacity, visible: t.visible, objectCaching: false });
+        // the outline sits exactly where the text was (in canvas coordinates: a group converts them on the way in)
+        util.applyTransformToObject(p, util.multiplyTransformMatrices(t.calcTransformMatrix(), [1, 0, 0, 1, p.pathOffset.x, p.pathOffset.y]));
+        const parent = t.group || this.canvas;
+        const i = parent.getObjects().indexOf(t);
+        parent.remove(t);
+        parent.insertAt(i, p);
+        done.push(found.name);
+      }
+    };
+    await pass(false);
+    if (askComputer && this.liveTexts().length) await pass(true);
+    if (done.length) { this.canvas.requestRenderAll(); this.commit(); }
+    const missing = [...new Set(this.liveTexts().map(t => String(t.fontFamily).split(',')[0].replace(/['"]/g, '').trim()))];
+    return { done, missing };
   }
 
   // Inks in use: [{ color, count, hidden }] ordered by how much they're used.

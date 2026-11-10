@@ -73,6 +73,8 @@ Everything runs from this folder, with no internet needed once it's loaded:
 
 ## Brand
 
-The interface follows the **Stacked design system** (Claude Design project exported to https://claude.ai/artifact/CCeQ6suRj9H6hEjiHDUSz2). Its own files are in `vendor/stacked-ds/`, unchanged: `tokens.css` (colours, type, spacing, radii), `components.css` (the `stk-` classes the app uses: buttons, section headings, toast, arcs, the drop shape), the Gotham Rounded and Gotham fonts, the 2026 **stacked MERCH** lockup and the S favicon. `css/app.css` only lays the tool out on top of them. To update the look, copy newer `tokens.css`/`components.css` from the design system into `vendor/stacked-ds/` and rebuild the single file.
+The interface follows the **Stacked AV** look (from the *Stacked AV — Design System Breakdown*): navy `#1B222A` ground with deep navy `#12171D` for the header and toolbar, AV orange `#F37626` used only for small marks (labels, short rules, one word in a headline, buttons), white type and muted `#9AA3AE` captions; small orange tracked capitals with a short orange stub underneath; two-tone headlines; no decorative shapes; the logo top-right. The logo is the 2026 **stacked MERCH** lockup.
+
+It's built on the Stacked design system's own files in `vendor/stacked-ds/` (unchanged): `tokens.css`, `components.css` (the `stk-` buttons and toast), the Gotham Rounded and Gotham fonts and the logos. `css/app.css` sets the AV palette over the system's tokens and lays the tool out.
 
 The Text tool offers Gotham Rounded and Gotham from the same files, so merch text can be set in the house faces.

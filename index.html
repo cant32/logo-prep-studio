@@ -17,18 +17,18 @@
 </head>
 <body class="stk">
 <header class="top">
-  <div class="stk-arc" aria-hidden="true"></div>
-  <div class="brand stk-divided"><img src="vendor/stacked-ds/logos/merch-horizontal-white.svg" alt="stacked MERCH"><hr><span class="title">Logo Prep Studio</span></div>
+  <span class="title">Logo Prep Studio</span>
   <div class="privacy" title="All processing happens in this browser. Logos are never uploaded or stored.">
     <span class="dot"></span>Runs on this computer · nothing is uploaded or saved
   </div>
+  <img class="brandmark" src="vendor/stacked-ds/logos/merch-horizontal-white.svg" alt="stacked MERCH">
 </header>
 
 <main class="layout">
   <aside class="panel" id="panel">
 
     <section class="step" id="step-load" data-open>
-      <h2 class="stk-section"><span class="n">1</span>Load logo</h2>
+      <h2 class="av-label"><span class="n">01</span><span class="lbl">Load logo</span></h2>
       <div class="body">
         <label class="drop" id="drop">
           <input type="file" id="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/svg+xml,.svg,application/pdf,.pdf,.ai,.eps" hidden>
@@ -58,7 +58,7 @@
     </section>
 
     <section class="step" id="step-enhance" data-disabled>
-      <h2 class="stk-section"><span class="n">2</span>Enhance &amp; vectorise</h2>
+      <h2 class="av-label"><span class="n">02</span><span class="lbl">Enhance &amp; vectorise</span></h2>
       <div class="body">
         <div class="field"><label>Quick presets</label>
           <div class="presets" role="group" aria-label="Quick presets">
@@ -105,7 +105,7 @@
     </section>
 
     <section class="step" id="step-colours" data-disabled>
-      <h2 class="stk-section"><span class="n">3</span>Colours</h2>
+      <h2 class="av-label"><span class="n">03</span><span class="lbl">Colours</span></h2>
       <div class="body">
         <p class="stk-note">Click a swatch, or type an exact hex code, to change a colour. Untick to knock it out (the garment shows through).</p>
         <ul class="inks" id="inkList"></ul>
@@ -128,7 +128,7 @@
     </section>
 
     <section class="step" id="step-text" data-disabled>
-      <h2 class="stk-section"><span class="n">4</span>Text</h2>
+      <h2 class="av-label"><span class="n">04</span><span class="lbl">Text</span></h2>
       <div class="body">
         <div class="field"><label for="txt">Text</label><input type="text" id="txt" placeholder="e.g. EST. 1998" maxlength="120"></div>
         <div class="field two">
@@ -151,7 +151,7 @@
     </section>
 
     <section class="step" id="step-export" data-disabled>
-      <h2 class="stk-section"><span class="n">5</span>Print-ready export</h2>
+      <h2 class="av-label"><span class="n">05</span><span class="lbl">Print-ready export</span></h2>
       <div class="body">
         <div class="field two">
           <div><label for="method">Print method</label><select id="method"></select></div>
@@ -188,10 +188,8 @@
       <canvas id="canvas"></canvas>
       <img id="compareImg" alt="" hidden>
       <div class="empty" id="empty">
-        <div class="stk-arc big" aria-hidden="true"></div>
-        <div class="stk-arc small" aria-hidden="true"></div>
-        <p class="stk-kicker">stacked merch</p>
-        <h1 class="stk-headline">Print-ready logos, <b>fast</b></h1>
+        <p class="av-kicker">Stacked Merch</p>
+        <h1 class="av-headline">Print-ready logos, <em>fast.</em></h1>
         <p class="stk-body">Drop in a client logo, even a tiny blurry JPEG. It gets AI-upscaled, cleaned to flat spot colours and traced to vector, ready for screen print, digital, laser or vinyl.</p>
       </div>
     </div>

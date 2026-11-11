@@ -163,6 +163,8 @@ export async function vectorise(imageData, opts = {}) {
   const body = layers.map(l => `<g fill="${l.color}">${l.paths.join('')}</g>`).join('');
   return {
     width: w, height: h, layers, shading,
+    // which pixels are logo (background and holes removed), for the gradient PNG
+    keep: Uint8Array.from(labels, l => l === 255 ? 0 : 1),
     // smooth colour changes inside the artwork (gradients, shading) that
     // flat inks can only approximate
     gradient: shading > 0.08,

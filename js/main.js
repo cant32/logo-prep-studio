@@ -3,7 +3,7 @@ import { upscale, autoScale, resize } from './upscale.js';
 import { vectorise } from './trace.js';
 import { FONTS, addFontFile } from './text.js';
 import { METHODS, runChecks } from './checks.js';
-import { buildSVG, buildEPS, download, pngBlob, pdfBlob, separationsBlob } from './export.js';
+import { buildSVG, buildEPS, download, pngBlob, rasterPngBlob, pdfBlob, separationsBlob } from './export.js';
 import { openPdf, inspectPage, imageData as pdfImage, pageSvg, renderPage } from './pdf.js';
 import { epsToPdf, sniff } from './eps.js';
 import { listZip, unzipEntry } from './zip.js';
@@ -209,6 +209,7 @@ function vectorCheck(kind, text) {
 async function useVector(svg, label, info) {
   counted(label);
   $('#gradientNote').hidden = true;
+  state.gradientArt = null;
   state.original = null;
   $('#cropBtn').hidden = true;
   showSource(label, info);
@@ -467,6 +468,7 @@ async function run() {
     });
     if (!result.layers.length) { toast('Nothing left to trace: try turning off "Remove background".'); return; }
     $('#gradientNote').hidden = !result.gradient;
+    state.gradientArt = result.gradient ? gradientArtwork(img, result.keep, result.background) : null;
     $('#gradientInks').textContent = result.layers.length === 1 ? 'one solid ink' : `${result.layers.length} solid inks`;
     $('#empty').hidden = true;
     await editor.setLogo(result.svg);
@@ -481,6 +483,53 @@ async function run() {
     state.busy = false; $('#run').disabled = false;
     if (state.pendingRun) { state.pendingRun = false; run(); }
   }
+}
+
+// The original (upscaled) picture with its gradient, background and holes cut
+// out using the trace, cropped to the logo. Edge pixels in the original are
+// part background (a pale rim on a dark garment), so along the edges each
+// pixel takes its colour from just inside the shape and its transparency
+// from how much background was mixed in. Digital print (DTG/DTF) uses this
+// instead of flattened inks.
+function gradientArtwork(img, keep, background) {
+  const { width: w, height: h, data: d } = img;
+  const B = background ? [1, 3, 5].map(i => parseInt(background.slice(i, i + 2), 16)) : null;
+  let x0 = w, x1 = -1, y0 = h, y1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (keep[y * w + x]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  if (x1 < 0) return null;
+  const P = 3;   // margin so soft edges aren't clipped
+  x0 = Math.max(0, x0 - P); y0 = Math.max(0, y0 - P); x1 = Math.min(w - 1, x1 + P); y1 = Math.min(h - 1, y1 + P);
+  const K = (x, y) => x >= 0 && y >= 0 && x < w && y < h ? keep[y * w + x] : 0;
+  // solidly inside: logo here and all around
+  const inside = (x, y) => { for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (!K(x + dx, y + dy)) return false; return true; };
+  const cw = x1 - x0 + 1, ch = y1 - y0 + 1, out = new ImageData(cw, ch);
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+    const sx = x + x0, sy = y + y0, i = sy * w + sx, o = (y * cw + x) * 4;
+    if (inside(sx, sy)) { out.data.set([d[i * 4], d[i * 4 + 1], d[i * 4 + 2], d[i * 4 + 3]], o); continue; }
+    // near the edge: is there logo close by at all?
+    let near = false;
+    for (let dy = -2; dy <= 2 && !near; dy++) for (let dx = -2; dx <= 2; dx++) if (K(sx + dx, sy + dy)) { near = true; break; }
+    if (!near) continue;
+    // colour from the nearest solidly-inside pixel
+    let C = null, best = Infinity;
+    for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+      const xx = sx + dx, yy = sy + dy, r = dx * dx + dy * dy;
+      if (r < best && xx >= 0 && yy >= 0 && xx < w && yy < h && inside(xx, yy)) { best = r; const j = yy * w + xx; C = [d[j * 4], d[j * 4 + 1], d[j * 4 + 2]]; }
+    }
+    const px = [d[i * 4], d[i * 4 + 1], d[i * 4 + 2]];
+    if (!C) C = px;
+    let a;
+    if (B) {
+      // how far this pixel is from the background, toward the ink: the ink's share
+      const cb = [C[0] - B[0], C[1] - B[1], C[2] - B[2]], len2 = cb[0] ** 2 + cb[1] ** 2 + cb[2] ** 2;
+      a = len2 < 400 ? K(sx, sy) : ((px[0] - B[0]) * cb[0] + (px[1] - B[1]) * cb[1] + (px[2] - B[2]) * cb[2]) / len2;
+    } else a = K(sx, sy);
+    a = Math.max(0, Math.min(1, a));
+    out.data.set([C[0], C[1], C[2], Math.round(a * d[i * 4 + 3])], o);
+  }
+  const c = document.createElement('canvas'); c.width = cw; c.height = ch;
+  c.getContext('2d').putImageData(out, 0, 0);
+  return c;
 }
 
 function afterLogo() {
@@ -731,7 +780,10 @@ async function refreshExport() {
   if (!built) { $('#checks').innerHTML = '<div class="info">Nothing visible to export.</div>'; $('#exports').innerHTML = ''; return; }
   $('#sizeInfo').textContent = `Print size ${built.widthMm.toFixed(0)} × ${built.heightMm.toFixed(0)} mm · ${built.inks.length} colour${built.inks.length > 1 ? 's' : ''}`;
   const ex = $('#exports'); ex.innerHTML = '';
-  for (const [kind, title, sub] of EXPORTS[method]) {
+  const list = [...EXPORTS[method]];
+  // digital print can print a gradient: offer the original artwork first
+  if (state.gradientArt && (method === 'dtg' || method === 'dtf')) list.unshift(['png-gradient', 'Gradient PNG (300 dpi)', 'The original artwork with its gradient kept, upscaled, background cut out. Colour edits and added text made here aren\'t in it']);
+  for (const [kind, title, sub] of list) {
     const b = document.createElement('button');
     b.innerHTML = `<b>${title}</b><span>${sub}</span>`;
     b.addEventListener('click', () => doExport(kind, method).catch(e => { console.error(e); toast('Export failed: ' + e.message, 5000); }));
@@ -768,6 +820,11 @@ async function doExport(kind, method) {
     case 'pdf-cut': return download(base + '_cut.pdf', await pdfBlob(buildSVG(editor, { ...o, mode: 'outline', color: 'ink', strokeMm: 0.1 })));
     case 'pdf-hairline': return download(base + '_cut.pdf', await pdfBlob(buildSVG(editor, { ...o, mode: 'outline', color: '#ff0000', strokeMm: 0.01 })));
     case 'png': { const r = await pngBlob(buildSVG(editor, o), 300); toast(`PNG ${r.w} × ${r.h} px at ${r.dpi} dpi`); return download(base + '.png', r.blob); }
+    case 'png-gradient': {
+      const r = await rasterPngBlob(state.gradientArt, o.widthMm, 300, o.mirror);
+      toast(`Gradient PNG ${r.w} × ${r.h} px at ${r.dpi} dpi`);
+      return download(base + '_gradient.png', r.blob);
+    }
     case 'png-black': { const r = await pngBlob(buildSVG(editor, single), 600); toast(`PNG ${r.w} × ${r.h} px at ${r.dpi} dpi`); return download(base + '.png', r.blob); }
     case 'seps': {
       toast('Building separations…');

@@ -90,6 +90,20 @@ export async function pngBlob(built, dpi = 300) {
   return { blob: await withDpi(blob, dpi), w, h, dpi: Math.round(dpi) };
 }
 
+// A picture (the gradient artwork) at its real print size and resolution.
+export async function rasterPngBlob(source, widthMm, dpi = 300, mirror = false) {
+  const max = 12000;
+  let w = Math.round(widthMm / 25.4 * dpi), h = Math.round(w * source.height / source.width);
+  if (Math.max(w, h) > max) { const s = max / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); dpi *= s; }
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d');
+  x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+  if (mirror) { x.translate(w, 0); x.scale(-1, 1); }
+  x.drawImage(source, 0, 0, w, h);
+  const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+  return { blob: await withDpi(blob, dpi), w, h, dpi: Math.round(dpi) };
+}
+
 async function withDpi(blob, dpi) {
   const buf = new Uint8Array(await blob.arrayBuffer());
   const ppm = Math.round(dpi / 0.0254);

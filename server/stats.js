@@ -6,7 +6,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const FILE = process.env.STATS_FILE || (fs.existsSync('/data') ? '/data/stats.json' : path.resolve('stats.json'));
+const DATA = process.env.DATA_DIR || '/data';
+const FILE = process.env.STATS_FILE || (fs.existsSync(DATA) ? path.join(DATA, 'stats.json') : path.resolve('stats.json'));
 const counts = { loaded: 0, downloaded: 0, since: new Date().toISOString() };
 try { Object.assign(counts, JSON.parse(fs.readFileSync(FILE, 'utf8'))); } catch { /* first run */ }
 console.log(`stats in ${FILE}: ${counts.loaded} loaded, ${counts.downloaded} downloaded`);

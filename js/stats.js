@@ -12,6 +12,8 @@ function show(s) {
   if (!el || !s || typeof s.loaded !== 'number') return;
   el.querySelector('[data-k=loaded]').textContent = fmt(s.loaded);
   el.querySelector('[data-k=downloaded]').textContent = fmt(s.downloaded);
+  el.querySelector('[data-w=loaded]').textContent = s.loaded === 1 ? 'logo loaded' : 'logos loaded';
+  el.querySelector('[data-w=downloaded]').textContent = s.downloaded === 1 ? 'file downloaded' : 'files downloaded';
   el.hidden = false;
 }
 

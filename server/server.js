@@ -4,6 +4,7 @@
 
 import http from 'node:http';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
@@ -129,6 +130,20 @@ function statAllowed(ip) {
   recent.push(now); statHits.set(ip, recent);
   if (statHits.size > 5000) for (const [k, v] of statHits) if (now - v[v.length - 1] > 60_000) statHits.delete(k);
   return recent.length <= 120;
+}
+
+// Railway volumes are owned by root. The container starts as root only to
+// hand the data folder to the unprivileged "node" user, then drops to it
+// before taking any requests.
+if (process.getuid && process.getuid() === 0) {
+  const data = process.env.DATA_DIR || '/data', NODE_UID = 1000, NODE_GID = 1000;
+  try {
+    if (fsSync.existsSync(data)) {
+      fsSync.chownSync(data, NODE_UID, NODE_GID);
+      for (const f of fsSync.readdirSync(data)) fsSync.chownSync(path.join(data, f), NODE_UID, NODE_GID);
+    }
+  } catch (e) { console.log(`data folder not prepared: ${e.message}`); }
+  process.setgid(NODE_GID); process.setuid(NODE_UID);
 }
 
 const server = http.createServer(async (req, res) => {

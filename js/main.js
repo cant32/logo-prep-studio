@@ -193,6 +193,7 @@ function vectorCheck(kind, text) {
 
 // Vector artwork goes straight into the editor, no tracing.
 async function useVector(svg, label, info) {
+  $('#gradientNote').hidden = true;
   state.original = null;
   $('#cropBtn').hidden = true;
   showSource(label, info);
@@ -450,6 +451,8 @@ async function run() {
       removeBackground: $('#removeBg').checked,
     });
     if (!result.layers.length) { toast('Nothing left to trace: try turning off "Remove background".'); return; }
+    $('#gradientNote').hidden = !result.gradient;
+    $('#gradientInks').textContent = result.layers.length === 1 ? 'one solid ink' : `${result.layers.length} solid inks`;
     $('#empty').hidden = true;
     await editor.setLogo(result.svg);
     progress(100, `Done: ${result.layers.length} colour${result.layers.length > 1 ? 's' : ''}, ${result.width} × ${result.height} px traced.`);

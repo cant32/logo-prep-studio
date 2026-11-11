@@ -44,6 +44,42 @@ export function removeOuter(labels, w, h, bg) {
   return out;
 }
 
+// Smooth colour changes inside the artwork (gradients, shading). The image is
+// blurred first so JPEG noise averages out and only gradual changes are
+// left; then each ink's solid inside (edges skipped) is checked against the
+// ink it was given. Returns the largest share for any one ink: near 0 for
+// flat artwork, high when an element has a gradient.
+export function measureShading(imageData, labels, palette, w, h) {
+  const d = imageData.data, B = 4, R = 8;   // R > B plus soft edges, so edges never leak in
+  // box blur via an integral image per channel
+  const W = w + 1, sums = [0, 1, 2].map(() => new Float64Array(W * (h + 1)));
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) for (let c = 0; c < 3; c++) {
+    const S = sums[c];
+    S[(y + 1) * W + x + 1] = d[(y * w + x) * 4 + c] + S[y * W + x + 1] + S[(y + 1) * W + x] - S[y * W + x];
+  }
+  const blur = (x, y, c) => {
+    const x0 = Math.max(0, x - B), x1 = Math.min(w, x + B + 1), y0 = Math.max(0, y - B), y1 = Math.min(h, y + B + 1), S = sums[c];
+    return (S[y1 * W + x1] - S[y0 * W + x1] - S[y1 * W + x0] + S[y0 * W + x0]) / ((x1 - x0) * (y1 - y0));
+  };
+  const edgeCount = new Map();
+  for (let x = 0; x < w; x++) for (const i of [x, (h - 1) * w + x]) edgeCount.set(labels[i], (edgeCount.get(labels[i]) || 0) + 1);
+  const bg = [...edgeCount].sort((a, b) => b[1] - a[1])[0][0];
+  const inside = new Map(), off = new Map();
+  for (let y = R; y < h - R; y += 2) for (let x = R; x < w - R; x += 2) {
+    const i = y * w + x, L = labels[i];
+    if (L === 255 || L === bg) continue;
+    let solid = true;
+    for (let dy = -R; dy <= R && solid; dy += 2) for (let dx = -R; dx <= R; dx += 2) if (labels[i + dy * w + dx] !== L) { solid = false; break; }
+    if (!solid) continue;
+    inside.set(L, (inside.get(L) || 0) + 1);
+    const c = palette[L];
+    if (Math.hypot(blur(x, y, 0) - c[0], blur(x, y, 1) - c[1], blur(x, y, 2) - c[2]) > 22) off.set(L, (off.get(L) || 0) + 1);
+  }
+  let worst = 0;
+  for (const [L, n] of inside) if (n >= 150) worst = Math.max(worst, (off.get(L) || 0) / n);
+  return worst;
+}
+
 // Background colour enclosed by the logo: the middle of an "o" or "e", the
 // gap inside a symbol. Those are holes, so the garment should show through,
 // not print as white. A piece that is small next to the shape around it
@@ -107,6 +143,7 @@ export async function vectorise(imageData, opts = {}) {
   const minArea = Math.max(4, Math.round(w * h / (470 * 2 ** (o.detail - 1))));
   let { labels } = snapToPalette(imageData, palette, { minArea });
 
+  const shading = measureShading(imageData, labels, palette, w, h);
   const bg = detectBackground(labels, w, h);
   if (o.removeBackground && bg >= 0) labels = removeHoles(removeOuter(labels, w, h, bg), w, h, bg);
 
@@ -125,7 +162,10 @@ export async function vectorise(imageData, opts = {}) {
   layers.sort((a, b) => b.area - a.area);
   const body = layers.map(l => `<g fill="${l.color}">${l.paths.join('')}</g>`).join('');
   return {
-    width: w, height: h, layers,
+    width: w, height: h, layers, shading,
+    // smooth colour changes inside the artwork (gradients, shading) that
+    // flat inks can only approximate
+    gradient: shading > 0.08,
     background: bg >= 0 ? hex(palette[bg]) : null,
     svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}">${body}</svg>`,
   };

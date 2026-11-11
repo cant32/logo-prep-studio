@@ -217,3 +217,4 @@ input[type=color] { width: 40px; height: 36px; padding: 2px; border: var(--borde
 
 /* the font picker needs room for "Gotham Rounded" */
 .field.two > div:has(#font) { flex: 1.5; }
+.gradsteps { margin: var(--space-3) 0 var(--space-2); }

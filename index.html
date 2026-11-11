@@ -110,6 +110,19 @@
         <p class="stk-note">Click a swatch, or type an exact hex code, to change a colour. Untick to knock it out (the garment shows through).</p>
         <div class="livetext" id="gradientNote" role="status" hidden>
           <p class="stk-note"><b>This logo has a gradient.</b> It has been flattened into <span id="gradientInks">solid inks</span>, which is right for screen print, vinyl, embroidery and laser. For DTG or DTF, which can print the gradient, choose that method in Export and download the <b>Gradient PNG</b>: the original artwork upscaled, with the gradient kept.</p>
+          <div class="field gradsteps">
+            <label for="gradSteps">Gradient colours</label>
+            <select id="gradSteps">
+              <option value="0">As traced</option>
+              <option value="2">2 colours</option>
+              <option value="3">3 colours</option>
+              <option value="4">4 colours</option>
+              <option value="5">5 colours</option>
+              <option value="6">6 colours</option>
+              <option value="8">8 colours</option>
+            </select>
+          </div>
+          <p class="stk-note">How many solid colours the gradient is split into. Only the gradient part changes; flat text keeps its ink. More colours look smoother but cost more screens.</p>
         </div>
         <ul class="inks" id="inkList"></ul>
         <div class="row">

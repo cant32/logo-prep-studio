@@ -178,6 +178,7 @@ function counted(label) {
 // Start the enhance + trace pipeline on a raster image.
 function useImage(id, label, note = '') {
   counted(label);
+  $('#gradSteps').value = '0';   // a new logo starts with its gradient as traced
   const s = Math.min(1, MAX_INPUT / Math.max(id.width, id.height));
   if (s < 1) id = resize(id, Math.round(id.width * s), Math.round(id.height * s));
   state.original = id;
@@ -464,7 +465,7 @@ async function run() {
     progress(90, 'Cleaning colours and tracing…'); await tick();
     const result = await vectorise(img, {
       inks: +$('#inks').value, detail: +$('#detail').value, corners: +$('#corners').value,
-      removeBackground: $('#removeBg').checked,
+      removeBackground: $('#removeBg').checked, gradientSteps: +$('#gradSteps').value,
     });
     if (!result.layers.length) { toast('Nothing left to trace: try turning off "Remove background".'); return; }
     $('#gradientNote').hidden = !result.gradient;
@@ -541,7 +542,7 @@ function afterLogo() {
 
 $('#run').addEventListener('click', run);
 const rerun = debounce(() => { if (state.original && editor.logo) run(); }, 350);
-['#inks', '#removeBg', '#scale', '#quality'].forEach(s => $(s).addEventListener('change', rerun));
+['#inks', '#removeBg', '#scale', '#quality', '#gradSteps'].forEach(s => $(s).addEventListener('change', rerun));
 $('#detail').addEventListener('input', e => { $('#detailOut').textContent = e.target.value; rerun(); });
 $('#corners').addEventListener('input', e => {
   const v = +e.target.value; $('#cornersOut').textContent = v < 45 ? 'Sharp' : v > 90 ? 'Smooth' : 'Balanced'; rerun();

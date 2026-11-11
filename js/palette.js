@@ -28,6 +28,18 @@ function segmentDistance(m, a, b) {
   return Math.hypot(m[0] - a[0] - ab[0] * t, m[1] - a[1] - ab[1] * t, m[2] - a[2] - ab[2] * t);
 }
 
+// CIE Lab and the colour difference people actually see (CIE76 ΔE).
+function lab([r, g, b]) {
+  const f = v => { v /= 255; return v > 0.04045 ? ((v + 0.055) / 1.055) ** 2.4 : v / 12.92; };
+  const R = f(r), G = f(g), B = f(b);
+  const x = (R * 0.4124 + G * 0.3576 + B * 0.1805) / 0.95047, y = R * 0.2126 + G * 0.7152 + B * 0.0722, z = (R * 0.0193 + G * 0.1192 + B * 0.9505) / 1.08883;
+  const g3 = t => t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116;
+  const fx = g3(x), fy = g3(y), fz = g3(z);
+  return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+}
+// difference in hue and saturation only, ignoring lightness
+const deltaAB = (a, b) => { const p = lab(a), q = lab(b); return Math.hypot(p[1] - q[1], p[2] - q[2]); };
+
 function rng(seed) {
   return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
@@ -68,14 +80,17 @@ export function findPalette(imageData, { count = 0, mergeDistance = 42, minShare
   clusters = clusters.filter(c => c.w > 0);
 
   if (!count) {
-    // Auto: merge clusters that are really the same ink (JPEG noise, edge blends)
-    const md2 = mergeDistance * mergeDistance * 9;
+    // Auto: merge clusters that are really the same ink (JPEG noise, edge
+    // blends). Noise mostly shifts lightness; two colours of clearly different
+    // hue or saturation are never merged, so a grey strapline next to a green
+    // wordmark stays its own ink.
+    const md2 = mergeDistance * mergeDistance * 9, otherHue = 25;
     let merged = true;
     while (merged && clusters.length > 1) {
       merged = false; let bi = -1, bj = -1, bd = Infinity;
       for (let i = 0; i < clusters.length; i++) for (let j = i + 1; j < clusters.length; j++) {
         const a = clusters[i].c, b = clusters[j].c, dd = dist2(a[0], a[1], a[2], b[0], b[1], b[2]);
-        if (dd < bd) { bd = dd; bi = i; bj = j; }
+        if (dd < bd && deltaAB(a, b) < otherHue) { bd = dd; bi = i; bj = j; }
       }
       if (bd < md2) {
         // keep the dominant colour rather than averaging toward the blend
@@ -159,7 +174,12 @@ export function snapToPalette(imageData, palette, { cleanPasses = 1, minArea } =
     }
     labels = next;
   }
-  labels = despeckle(labels, w, h, minArea ?? Math.max(16, Math.round(w * h / 15000)));
+  // the background: the label found most along the image's edges
+  const edge = new Map();
+  for (let x = 0; x < w; x++) for (const i of [x, (h - 1) * w + x]) edge.set(labels[i], (edge.get(labels[i]) || 0) + 1);
+  for (let y = 0; y < h; y++) for (const i of [y * w, y * w + w - 1]) edge.set(labels[i], (edge.get(labels[i]) || 0) + 1);
+  const bg = [...edge].sort((a, b) => b[1] - a[1])[0][0];
+  labels = despeckle(labels, w, h, minArea ?? Math.max(16, Math.round(w * h / 15000)), { bg });
   const out = new ImageData(w, h);
   for (let i = 0; i < w * h; i++) {
     const l = labels[i];
@@ -170,16 +190,24 @@ export function snapToPalette(imageData, palette, { cleanPasses = 1, minArea } =
 }
 
 // Merge islands smaller than minArea pixels into the colour that surrounds
-// them most: stray specks, JPEG blotches, noise inside thin lines.
-export function despeckle(labels, w, h, minArea) {
+// them most: stray specks, JPEG blotches, noise inside thin lines. A small
+// solid dot standing alone on the background is kept (the dot of an "i" in
+// small text), and so is a small solid hole inside one shape (the eye of an "e").
+export function despeckle(labels, w, h, minArea, { bg = -1 } = {}) {
+  const dotMin = Math.max(8, Math.round(minArea / 10));
   const out = labels.slice(), seen = new Uint8Array(w * h), stack = [];
   for (let start = 0; start < w * h; start++) {
     if (seen[start]) continue;
     const L = labels[start], members = [], border = new Map();
+    let x0 = w, x1 = 0, y0 = h, y1 = 0;
     seen[start] = 1; stack.push(start);
     while (stack.length) {
       const i = stack.pop(), x = i % w;
-      if (members.length <= minArea) members.push(i);
+      if (members.length <= minArea) {
+        members.push(i);
+        const y = (i - x) / w;
+        if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
       for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i >= w ? i - w : -1, i < w * (h - 1) ? i + w : -1]) {
         if (j < 0) continue;
         if (labels[j] === L) { if (!seen[j]) { seen[j] = 1; stack.push(j); } }
@@ -187,6 +215,15 @@ export function despeckle(labels, w, h, minArea) {
       }
     }
     if (members.length > minArea || L === 255) continue;
+    // a dot on the background, or a small hole inside one shape (the eye of a
+    // small "e"): solid and roundish, and wholly inside a single colour
+    const around = [...border.keys()];
+    const onBackground = L !== bg && around.every(l => l === bg || l === 255);
+    const inOneShape = around.length === 1 && around[0] !== 255;
+    if (members.length >= dotMin && (onBackground || inOneShape)) {
+      const box = (x1 - x0 + 1) * (y1 - y0 + 1), long = Math.max(x1 - x0, y1 - y0) + 1, short = Math.min(x1 - x0, y1 - y0) + 1;
+      if (members.length >= box * 0.5 && long <= short * 3) continue;   // solid and roundish: a dot
+    }
     let best = L, bn = 0;
     for (const [l, n] of border) if (n > bn) { bn = n; best = l; }
     for (const i of members) out[i] = best;

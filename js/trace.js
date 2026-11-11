@@ -44,6 +44,43 @@ export function removeOuter(labels, w, h, bg) {
   return out;
 }
 
+// Background colour enclosed by the logo: the middle of an "o" or "e", the
+// gap inside a symbol. Those are holes, so the garment should show through,
+// not print as white. A piece that is small next to the shape around it
+// (white lettering on a coloured badge) is artwork and stays.
+export function removeHoles(labels, w, h, bg) {
+  const comp = new Int32Array(w * h).fill(-1), info = [], stack = [];
+  for (let s = 0; s < w * h; s++) {
+    if (comp[s] >= 0 || labels[s] === 255) continue;
+    const id = info.length, L = labels[s], c = { L, n: 0, x0: w, x1: 0, y0: h, y1: 0, pixels: L === bg ? [] : null };
+    info.push(c); comp[s] = id; stack.push(s);
+    while (stack.length) {
+      const i = stack.pop(), x = i % w, y = (i - x) / w;
+      c.n++; if (c.pixels) c.pixels.push(i);
+      if (x < c.x0) c.x0 = x; if (x > c.x1) c.x1 = x; if (y < c.y0) c.y0 = y; if (y > c.y1) c.y1 = y;
+      for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i >= w ? i - w : -1, i < w * (h - 1) ? i + w : -1]) {
+        if (j >= 0 && comp[j] < 0 && labels[j] === L) { comp[j] = id; stack.push(j); }
+      }
+    }
+  }
+  const out = labels.slice(), box = c => (c.x1 - c.x0 + 1) * (c.y1 - c.y0 + 1);
+  for (const c of info) {
+    if (!c.pixels) continue;
+    // the shape around it: the neighbour it shares the most edge with
+    const around = new Map();
+    for (const i of c.pixels) {
+      const x = i % w;
+      for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i >= w ? i - w : -1, i < w * (h - 1) ? i + w : -1]) {
+        if (j >= 0 && comp[j] >= 0 && labels[j] !== c.L) around.set(comp[j], (around.get(comp[j]) || 0) + 1);
+      }
+    }
+    if (!around.size) continue;
+    const outer = info[[...around].sort((a, b) => b[1] - a[1])[0][0]];
+    if (box(c) >= box(outer) * 0.02) for (const i of c.pixels) out[i] = 255;
+  }
+  return out;
+}
+
 function traceMask(mask, w, h, o) {
   const px = new Uint8Array(w * h * 4);
   for (let i = 0; i < mask.length; i++) {
@@ -71,7 +108,7 @@ export async function vectorise(imageData, opts = {}) {
   let { labels } = snapToPalette(imageData, palette, { minArea });
 
   const bg = detectBackground(labels, w, h);
-  if (o.removeBackground && bg >= 0) labels = removeOuter(labels, w, h, bg);
+  if (o.removeBackground && bg >= 0) labels = removeHoles(removeOuter(labels, w, h, bg), w, h, bg);
 
   const area = new Array(palette.length).fill(0);
   for (let i = 0; i < labels.length; i++) if (labels[i] !== 255) area[labels[i]]++;
@@ -80,7 +117,9 @@ export async function vectorise(imageData, opts = {}) {
     if (!area[k]) continue;
     const mask = new Uint8Array(w * h);
     for (let i = 0; i < mask.length; i++) mask[i] = labels[i] === k ? 1 : 0;
-    const paths = traceMask(mask, w, h, { mode: o.mode, speckle: minArea, corner: o.corners });
+    // the colour clean-up has already removed real specks (and kept dots), so
+    // the tracer only drops crumbs
+    const paths = traceMask(mask, w, h, { mode: o.mode, speckle: Math.max(4, Math.round(minArea / 10)), corner: o.corners });
     if (paths.length) layers.push({ color: hex(palette[k]), area: area[k], paths });
   }
   layers.sort((a, b) => b.area - a.area);

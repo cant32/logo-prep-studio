@@ -2,7 +2,7 @@
 // shapes plus any text, and handles recolouring, knock-outs, erasing
 // individual shapes, moving things around and undo.
 
-import { Canvas, Group, Path, Point, Color, FabricObject, loadSVGFromString, util } from '../vendor/fabric.min.js';
+import { Canvas, Group, Path, Point, Color, FabricObject, Rect, loadSVGFromString, util } from '../vendor/fabric.min.js';
 
 // selection handles in brand orange
 Object.assign(FabricObject.ownDefaults, { borderColor: '#e87928', cornerColor: '#e87928', cornerStrokeColor: '#24272c', cornerStyle: 'circle', transparentCorners: false, cornerSize: 11, borderScaleFactor: 1.5 });
@@ -14,6 +14,24 @@ export const normColor = c => {
   if (!c || typeof c !== 'string' || c === 'none' || c === 'transparent') return null;
   try { return '#' + new Color(c).toHex().toLowerCase().slice(0, 6); } catch { return null; }
 };
+
+// PDFs read by pdf.js put live text's colour and font on the inner <tspan>,
+// which the editor's SVG reader ignores, so the text came in black. Copy them
+// up to the <text> when it doesn't set its own.
+export function liftTextStyle(svg) {
+  if (!/<(svg:)?tspan\b/.test(svg)) return svg;
+  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+  if (doc.querySelector('parsererror')) return svg;
+  let changed = false;
+  for (const t of doc.getElementsByTagNameNS('http://www.w3.org/2000/svg', 'text')) {
+    const span = t.getElementsByTagNameNS('http://www.w3.org/2000/svg', 'tspan')[0];
+    if (!span) continue;
+    for (const a of ['fill', 'fill-opacity', 'stroke', 'stroke-width', 'font-family', 'font-size', 'font-weight', 'font-style']) {
+      if (span.hasAttribute(a) && !t.hasAttribute(a)) { t.setAttribute(a, span.getAttribute(a)); changed = true; }
+    }
+  }
+  return changed ? new XMLSerializer().serializeToString(doc.documentElement) : svg;
+}
 
 // Designers' files often keep a whole wordmark as one compound path, so a
 // click would paint or delete every letter at once. Split each compound path
@@ -86,7 +104,8 @@ function splitPathData(d, ctx, evenodd) {
 }
 
 export class Editor {
-  constructor(el, host, { onChange, onSelect } = {}) {
+  constructor(el, host, { onChange, onSelect, onCropped } = {}) {
+    this.onCropped = onCropped;
     this.host = host;
     this.onChange = onChange || (() => {});
     this.onSelect = onSelect || (() => {});
@@ -102,8 +121,30 @@ export class Editor {
     c.on('selection:created', () => this.onSelect(c.getActiveObject()));
     c.on('selection:updated', () => this.onSelect(c.getActiveObject()));
     c.on('selection:cleared', () => this.onSelect(null));
+    // Crop for vector artwork: drag a box, keep what's inside it
     c.on('mouse:down', e => {
-      if (!this.tool) return;
+      if (this.tool !== 'keep') return;
+      const p = c.getScenePoint(e.e);
+      this._box = { x: p.x, y: p.y, rect: new Rect({ left: p.x, top: p.y, width: 1, height: 1, fill: 'rgba(243,118,38,.12)', stroke: '#F37626', strokeWidth: 2 / c.getZoom(), strokeDashArray: [6 / c.getZoom(), 4 / c.getZoom()], selectable: false, evented: false, excludeFromExport: true, isCropBox: true }) };
+      c.add(this._box.rect);
+    });
+    c.on('mouse:move', e => {
+      if (this.tool !== 'keep' || !this._box) return;
+      const p = c.getScenePoint(e.e), b = this._box;
+      b.rect.set({ left: Math.min(b.x, p.x), top: Math.min(b.y, p.y), width: Math.abs(p.x - b.x), height: Math.abs(p.y - b.y) });
+      c.requestRenderAll();
+    });
+    c.on('mouse:up', () => {
+      if (this.tool !== 'keep' || !this._box) return;
+      const r = this._box.rect, box = { x0: r.left, y0: r.top, x1: r.left + r.width, y1: r.top + r.height };
+      c.remove(r); this._box = null;
+      if (r.width * c.getZoom() < 8 || r.height * c.getZoom() < 8) { c.requestRenderAll(); return; }
+      const removed = this.keepInside(box);
+      this.setTool(null);
+      if (this.onCropped) this.onCropped(removed);
+    });
+    c.on('mouse:down', e => {
+      if (!this.tool || this.tool === 'keep') return;
       const shape = this.shapeAt(c.getViewportPoint(e.e), c.getScenePoint(e.e));
       if (!shape) return;
       if (this.tool === 'erase') {
@@ -146,6 +187,28 @@ export class Editor {
     return near;
   }
 
+  // Keep the shapes inside a box (scene coordinates). A shape stays if its
+  // middle is in the box, unless it is much bigger than the box: that's a
+  // page background or frame around the logo, not part of it.
+  keepInside(box) {
+    const area = (box.x1 - box.x0) * (box.y1 - box.y0);
+    let removed = 0;
+    for (const o of this.leaves()) {
+      if (o.isCropBox) continue;
+      const b = o.getBoundingRect(), cx = b.left + b.width / 2, cy = b.top + b.height / 2;
+      const inside = cx >= box.x0 && cx <= box.x1 && cy >= box.y0 && cy <= box.y1;
+      const huge = b.width * b.height > area * 1.6 && (b.left < box.x0 - 2 || b.top < box.y0 - 2 || b.left + b.width > box.x1 + 2 || b.top + b.height > box.y1 + 2);
+      if (inside && !huge) continue;
+      if (o.group) o.group.remove(o); else this.canvas.remove(o);
+      removed++;
+    }
+    // drop groups left empty
+    for (const g of this.canvas.getObjects()) if (g instanceof Group && !g.getObjects().length) this.canvas.remove(g);
+    if (removed) { this.fitAll(); this.commit(); }
+    this.canvas.requestRenderAll();
+    return removed;
+  }
+
   // false for shapes inside a hidden group
   isShown(o) { for (let g = o.group; g; g = g.group) if (g.visible === false) return false; return true; }
 
@@ -163,7 +226,7 @@ export class Editor {
 
   // Replace the logo with new vector artwork (an SVG string).
   async setLogo(svg) {
-    const { objects } = await loadSVGFromString(splitCompoundPaths(svg));
+    const { objects } = await loadSVGFromString(splitCompoundPaths(liftTextStyle(svg)));
     const shapes = objects.filter(Boolean);
     for (const s of shapes) {
       s.fill = normColor(s.fill) || s.fill;
@@ -315,6 +378,7 @@ export class Editor {
     this.canvas.defaultCursor = tool ? 'crosshair' : 'default';
     this.canvas.hoverCursor = tool ? 'crosshair' : 'move';
     for (const o of this.canvas.getObjects()) o.selectable = !tool;
+    this.canvas.selection = !tool;   // no rubber-band selection while a tool is on
     this.canvas.discardActiveObject();
     this.canvas.requestRenderAll();
   }

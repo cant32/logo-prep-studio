@@ -9,7 +9,35 @@ import zlib from 'node:zlib';
 import { safeGet } from './safe-fetch.js';
 
 const MAX_CANDIDATES = 8;
-const MAX_FILES = 10;
+// pictures smaller than this (longest side, px) aren't worth offering: too
+// little detail left to make a print logo from
+const MIN_PICTURE = 300;
+
+// Width and height of a PNG, JPEG, GIF or WebP from its first bytes.
+export function imageSize(b) {
+  try {
+    if (b[0] === 0x89 && b[1] === 0x50) return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) };          // PNG IHDR
+    if (b[0] === 0x47 && b[1] === 0x49) return { w: b.readUInt16LE(6), h: b.readUInt16LE(8) };            // GIF
+    if (b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WEBP') {
+      const kind = b.toString('latin1', 12, 16);
+      if (kind === 'VP8 ') return { w: b.readUInt16LE(26) & 0x3fff, h: b.readUInt16LE(28) & 0x3fff };
+      if (kind === 'VP8L') { const v = b.readUInt32LE(21); return { w: (v & 0x3fff) + 1, h: ((v >> 14) & 0x3fff) + 1 }; }
+      if (kind === 'VP8X') return { w: b.readUIntLE(24, 3) + 1, h: b.readUIntLE(27, 3) + 1 };
+    }
+    if (b[0] === 0xff && b[1] === 0xd8) {                                                                // JPEG: find a SOF marker
+      let i = 2;
+      while (i + 9 < b.length) {
+        if (b[i] !== 0xff) { i++; continue; }
+        const m = b[i + 1];
+        if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return { w: b.readUInt16BE(i + 7), h: b.readUInt16BE(i + 5) };
+        if (m === 0xd8 || m === 0x01 || (m >= 0xd0 && m <= 0xd7)) { i += 2; continue; }
+        i += 2 + b.readUInt16BE(i + 2);
+      }
+    }
+  } catch { /* unreadable header */ }
+  return null;
+}
+const MAX_FILES = 14;
 const MAX_BRAND_PAGES = 3;
 // file types worth offering as downloads
 const FILE_EXT = /\.(pdf|ai|eps|svgz?|zip)(?:[?#]|$)/i;
@@ -137,8 +165,9 @@ export async function findLogos(siteUrl) {
   const brandPages = await scanBrandPages(html, page.url, abs, brandWord, files, add);
 
   // Fetch the best few. SVGs come back as text; pictures as data URIs.
-  const ranked = [...found.values()].sort((a, b) => b.score - a.score).slice(0, MAX_CANDIDATES * 2);
+  const ranked = [...found.values()].sort((a, b) => b.score - a.score).slice(0, MAX_CANDIDATES * 3);
   const results = [];
+  let tooSmall = 0;
   for (const c of ranked) {
     if (results.length >= MAX_CANDIDATES) break;
     try {
@@ -148,7 +177,11 @@ export async function findLogos(siteUrl) {
           const comma = c.url.indexOf(','), meta = c.url.slice(0, comma);
           const text = /;base64/.test(meta) ? Buffer.from(c.url.slice(comma + 1), 'base64').toString('utf8') : decodeURIComponent(c.url.slice(comma + 1));
           results.push({ type: 'svg', source: c.source, svg: cleanSvg(text) });
-        } else if (c.url.length < 2_800_000) results.push({ type: 'image', source: c.source, dataUrl: c.url });
+        } else if (c.url.length < 2_800_000) {
+          const size = imageSize(Buffer.from(c.url.slice(c.url.indexOf(',') + 1), 'base64'));
+          if (size && Math.max(size.w, size.h) < MIN_PICTURE) { tooSmall++; continue; }
+          results.push({ type: 'image', source: c.source, dataUrl: c.url, ...(size || {}) });
+        }
         continue;
       }
       const res = await safeGet(c.url, { maxBytes: 2_000_000, timeoutMs: 8000 });
@@ -158,23 +191,26 @@ export async function findLogos(siteUrl) {
       if (type === 'image/svg+xml' || /<svg\b/i.test(text) || gz && isSvgUrl(c.url)) {
         results.push({ type: 'svg', source: c.source, svg: cleanSvg(svgText(res.body)), url: c.url });
       } else if (/^image\/(png|jpe?g|webp|gif)$/.test(type)) {
-        results.push({ type: 'image', source: c.source, dataUrl: `data:${type};base64,${res.body.toString('base64')}`, url: c.url });
+        const size = imageSize(res.body);
+        if (size && Math.max(size.w, size.h) < MIN_PICTURE) { tooSmall++; continue; }
+        results.push({ type: 'image', source: c.source, dataUrl: `data:${type};base64,${res.body.toString('base64')}`, url: c.url, ...(size || {}) });
       }
     } catch { /* skip candidates that don't load */ }
   }
   // the same artwork can turn up twice (inline and as a file)
   const seen = new Set();
   return {
-    site: page.url, host, brandPages,
+    site: page.url, host, brandPages, tooSmall, minPicture: MIN_PICTURE,
     candidates: results.filter(r => { const k = (r.svg || r.dataUrl).slice(0, 4000); if (seen.has(k)) return false; seen.add(k); return true; }),
     // downloads aren't fetched now: the app fetches one when it's picked
     files: [...files.values()].sort((a, b) => b.score - a.score).slice(0, MAX_FILES)
-      .map(({ format, source, url, name }) => ({ type: 'file', format, source, url, name })),
+      .map(({ format, source, url, name, maybe }) => ({ type: 'file', format, source, url, name, maybe: !!maybe })),
   };
 }
 
 // Links to logo files. On a brand page every file link counts; elsewhere
-// only ones that mention the logo or brand (so menus and brochures are left out).
+// ones that mention the logo or brand. Other PDFs (menus, brochures) come
+// last, marked as maybe.
 function collectFiles(html, abs, brandWord, source, onBrandPage, files) {
   for (const m of html.matchAll(/<a\b[^>]*>/gi)) {
     const href = decode(attr(m[0], 'href'));
@@ -190,14 +226,19 @@ function collectFiles(html, abs, brandWord, source, onBrandPage, files) {
     const label = [path, dl, attr(m[0], 'title'), attr(m[0], 'aria-label'), text].join(' ');
     const logoish = looksLogo(label) || /\bmark\b|identity|vector|wordmark|lockup|emblem|crest/i.test(label);
     const brandish = new RegExp(brandWord, 'i').test(label);
-    if (!logoish && !(onBrandPage && (brandish || format !== 'pdf' || /kit|asset|press|media/i.test(label)))) continue;
-    if (/menu|brochure|catalogue|catalog|price|terms|policy|report|cv\b|application|form\b/i.test(label) && !logoish) continue;
-    let score = 50 + (logoish ? 40 : 0) + (brandish ? 10 : 0) + (onBrandPage ? 10 : 0);
+    const document = /menu|brochure|catalogue|catalog|price|report|newsletter|flyer|leaflet|timetable/i.test(label);
+    const likely = logoish || (onBrandPage && !document && (brandish || format !== 'pdf' || /kit|asset|press|media/i.test(label)));
+    // Any other PDF on the site (a menu, brochure, price list, letterhead)
+    // usually has the logo on it as vector artwork: offered last, as a maybe.
+    // Forms, policies and CVs rarely carry a usable logo.
+    const maybe = !likely && (format === 'pdf' || format === 'ai') && !/terms|policy|privacy|gdpr|cookie|cv\b|resume|application|form\b|careers?|jobs?/i.test(label);
+    if (!likely && !maybe) continue;
+    let score = likely ? 50 + (logoish ? 40 : 0) + (brandish ? 10 : 0) + (onBrandPage ? 10 : 0) : 5 + (brandish ? 3 : 0);
     score += { ai: 25, eps: 22, pdf: 20, svg: 18, zip: 8 }[format] || 0;   // master artwork formats first
     if (/white|reverse|negative|knock|mono|black/i.test(label)) score -= 4;   // the usual full-colour version first
     const name = decodeURIComponent(path.split('/').pop() || dl || 'logo.' + format) || 'logo.' + format;
     const old = files.get(url);
-    if (!old || old.score < score) files.set(url, { format, source, url, name: name.slice(0, 120), score, label: text.slice(0, 80) });
+    if (!old || old.score < score) files.set(url, { format, source: maybe ? 'Other PDF on the site, may contain the logo' : source, url, name: name.slice(0, 120), score, label: text.slice(0, 80), maybe });
   }
 }
 

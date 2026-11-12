@@ -42,6 +42,7 @@ function progress(pct, text) {
 // ---------------------------------------------------------------- editor
 
 const editor = new Editor($('#canvas'), $('#canvasHost'), {
+  onCropped: n => toast(n ? `Kept what's inside the box (${n} shape${n > 1 ? 's' : ''} removed). Undo brings them back.` : 'Everything was already inside the box.'),
   onChange: () => { $('#undo').disabled = editor.history.length < 2; renderInks(); renderLiveText(); refreshExportSoon(); },
   onSelect: obj => showTextProps(obj && obj.isText ? obj : null),
 });
@@ -223,7 +224,7 @@ async function useVector(svg, label, info) {
   $('#gradientNote').hidden = true;
   state.gradientArt = null;
   state.original = null;
-  $('#cropBtn').hidden = true;
+  $('#cropBtn').hidden = false;   // crop works on vector too: drag a box on the canvas
   showSource(label, info);
   $('#empty').hidden = true;
   editor.clear();
@@ -315,19 +316,23 @@ $('#webForm').addEventListener('submit', async e => {
   try {
     const data = await searchSite(site);
     if (!data.candidates.length && !(data.files || []).length) {
-      status.textContent = `No logo found on ${data.host}. Some sites only draw their logo with JavaScript: try the address of a page that shows it, or save the logo from the site and drop it in.`;
+      status.textContent = (data.tooSmall ? `Only small pictures (under ${data.minPicture} px) on ${data.host}, too small to print from. ` : '') + `No logo found on ${data.host}. Some sites only draw their logo with JavaScript: try the address of a page that shows it, or save the logo from the site and drop it in.`;
       return;
     }
     const files = data.files || [];
     const vectors = data.candidates.filter(c => c.type === 'svg').length;
     const pages = (data.brandPages || []).map(p => new URL(p.url).pathname).join(', ');
-    status.textContent = (files.length
-      ? `Found ${files.length} logo download${files.length > 1 ? 's' : ''}${pages ? ` (from ${pages})` : ''} and ${data.candidates.length} on the page. The AI, EPS and PDF downloads are usually the master print artwork.`
+    const sure = files.filter(f => !f.maybe).length, maybes = files.length - sure;
+    status.textContent = (sure
+      ? `Found ${sure} logo download${sure > 1 ? 's' : ''}${pages ? ` (from ${pages})` : ''} and ${data.candidates.length} on the page. The AI, EPS and PDF downloads are usually the master print artwork.`
       : vectors ? `Found ${data.candidates.length} on ${data.host}. Vector SVGs are marked in orange: pick the real logo.`
-      : `Found ${data.candidates.length} on ${data.host}, but no vector version: these are pictures and will be traced.`)
+      : data.candidates.length ? `Found ${data.candidates.length} on ${data.host}, but no vector version: these are pictures and will be traced.`
+      : `No logo image found on ${data.host}.`)
+      + (maybes ? ` Also ${maybes} other PDF${maybes > 1 ? 's' : ''} from the site (menus, brochures…), listed last: these often have the logo as vector. Open one, then use Crop to keep just the logo.` : '')
+      + (data.tooSmall ? ` ${data.tooSmall} picture${data.tooSmall > 1 ? 's' : ''} under ${data.minPicture} px ${data.tooSmall > 1 ? 'were' : 'was'} left out as too small to print from.` : '')
       + ' Check it\'s the current version before it goes to print.';
     for (const f of files) {
-      const card = pickCard({ badge: f.format.toUpperCase(), kind: f.format === 'zip' ? 'Logo pack' : 'Print file', vector: true, from: `${f.name} · ${f.source}`, title: f.url });
+      const card = pickCard({ badge: f.format.toUpperCase(), kind: f.maybe ? 'PDF on the site' : f.format === 'zip' ? 'Logo pack' : 'Print file', vector: !f.maybe, from: `${f.name} · ${f.source}`, title: f.url });
       card.addEventListener('click', () => choose(card, async () => {
         status.textContent = `Downloading ${f.name}…`;
         const bytes = await fetchWebFile(f.url);
@@ -338,7 +343,7 @@ $('#webForm').addEventListener('submit', async e => {
     }
     data.candidates.forEach((c, i) => {
       const src = c.type === 'svg' ? URL.createObjectURL(new Blob([c.svg], { type: 'image/svg+xml' })) : c.dataUrl;
-      const card = pickCard({ thumb: src, kind: c.type === 'svg' ? 'Vector SVG' : 'Picture', vector: c.type === 'svg', from: c.source });
+      const card = pickCard({ thumb: src, kind: c.type === 'svg' ? 'Vector SVG' : c.w ? `Picture · ${c.w} × ${c.h} px` : 'Picture', vector: c.type === 'svg', from: c.source });
       card.querySelector('.thumb').dataset.alt = `Option ${i + 1} from ${data.host}`;
       card.addEventListener('click', () => choose(card, () => useWebLogo(c, data.host)));
       box.appendChild(card);
@@ -879,7 +884,13 @@ document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('clic
 const crop = { dlg: $('#cropDlg'), img: $('#cropImg'), box: $('#cropBox'), rect: null };
 $('#cropBtn').addEventListener('click', () => {
   const src = state.uncropped || state.original;
-  if (!src) return;
+  if (!src) {
+    // vector artwork: drag a box on the canvas, keep what's inside
+    if (!editor.logo) return;
+    setTool(null); editor.setTool('keep');
+    toast('Drag a box around the logo you want to keep. Everything else is removed (Undo brings it back).', 6000);
+    return;
+  }
   crop.img.src = imageDataUrl(src);
   // show small logos enlarged so they're easy to crop
   const k = Math.min(Math.min(innerWidth * 0.85, 860) / src.width, innerHeight * 0.6 / src.height);

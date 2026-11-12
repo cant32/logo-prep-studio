@@ -218,3 +218,16 @@ input[type=color] { width: 40px; height: 36px; padding: 2px; border: var(--borde
 /* the font picker needs room for "Gotham Rounded" */
 .field.two > div:has(#font) { flex: 1.5; }
 .gradsteps { margin: var(--space-3) 0 var(--space-2); }
+
+/* Split PDF */
+.splitlink { margin: var(--space-3) 0 0; }
+#pdfPages { flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+#pdfPages label { flex-basis: 100%; }
+dialog.split { width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 48px); }
+dialog.split .row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.splitgrid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); max-height: 56vh; overflow-y: auto; margin: var(--space-3) 0; }
+.splitgrid:empty { display: none; }
+.splitpage .thumb { background: #fff; }
+.splitpage .thumb canvas { max-width: 100%; max-height: 100%; box-shadow: 0 0 0 1px rgba(0,0,0,.15); }
+.splitpage[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-tint); }
+.splitpage[aria-pressed="true"] .kind::after { content: '  ✓'; color: var(--accent); }

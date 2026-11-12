@@ -49,8 +49,10 @@
           <div><b id="sourceName"></b><span id="sourceInfo"></span></div>
         </div>
         <div class="vcheck" id="vcheck" role="status" hidden></div>
+        <p class="splitlink"><button class="stk-btn ghost small" type="button" id="splitOpen">Split a PDF into pages</button></p>
         <div class="pdfchoice" id="pdfChoice" hidden>
-          <div class="field" id="pdfPages" hidden><label for="pdfPage">Page</label><select id="pdfPage"></select></div>
+          <div class="field" id="pdfPages" hidden><label for="pdfPage">Page</label><select id="pdfPage"></select>
+            <button class="stk-btn ghost small" type="button" id="pdfPageSave">Download this page as a PDF</button></div>
           <div class="choices" id="pdfButtons"></div>
         </div>
         <div class="row"><button class="stk-btn ghost small" id="cropBtn" hidden>Crop</button></div>
@@ -223,6 +225,21 @@
     <button class="stk-btn primary small" id="cropApply">Apply crop</button>
     <button class="stk-btn ghost small" id="cropReset">Use whole image</button>
     <button class="stk-btn ghost small" id="cropCancel">Cancel</button>
+  </div>
+</dialog>
+<dialog class="crop split" id="splitDlg" aria-labelledby="splitTitle">
+  <h3 class="stk-ruled" id="splitTitle">Split PDF</h3>
+  <p class="stk-note">Save the pages you need from a multi-page PDF as their own PDFs. Pages are copied exactly, still vector, nothing redrawn. The file stays on this computer.</p>
+  <div class="row">
+    <label class="stk-btn primary small">Choose a PDF<input type="file" id="splitFile" accept="application/pdf,.pdf,.ai" hidden></label>
+    <span class="stk-note" id="splitInfo">Or drop one here.</span>
+  </div>
+  <div class="splitgrid webresults" id="splitGrid"></div>
+  <div class="row">
+    <button class="stk-btn primary small" id="splitEach" disabled>Download page as PDF</button>
+    <button class="stk-btn ghost small" id="splitOne" disabled>Download as one PDF</button>
+    <button class="stk-btn ghost small" id="splitAll" hidden>Select all</button>
+    <button class="stk-btn ghost small" id="splitClose">Close</button>
   </div>
 </dialog>
 <div class="toast stk-toast" id="toast" role="status" aria-live="polite"></div>

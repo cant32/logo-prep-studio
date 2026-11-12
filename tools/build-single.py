@@ -23,6 +23,7 @@ if bundle.returncode: sys.exit(bundle.stderr)
 assets = {f'fonts/{f}': ('font/woff', b64(f'fonts/{f}')) for f in sorted(os.listdir(os.path.join(ROOT, 'fonts'))) if f.endswith('.woff')}
 assets['vendor/vtracer/vtracer.wasm'] = ('application/wasm', b64('vendor/vtracer/vtracer.wasm'))
 assets['vendor/pdfjs/pdf.worker.min.js'] = ('text/javascript', b64('vendor/pdfjs/pdf.worker.min.js'))
+assets['vendor/pdf-lib/pdf-lib.min.js'] = ('text/javascript', b64('vendor/pdf-lib/pdf-lib.min.js'))   # Split PDF, loaded when used
 for f in sorted(os.listdir(os.path.join(ROOT, 'vendor/stacked-ds/fonts'))):
     if f.endswith('.otf'):   # Gotham faces for the text tool
         assets[f'vendor/stacked-ds/fonts/{f}'] = ('font/otf', b64(f'vendor/stacked-ds/fonts/{f}'))

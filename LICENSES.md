@@ -13,6 +13,7 @@ All bundled components allow internal commercial use.
 | [opentype.js](https://github.com/opentypejs/opentype.js) 1.3 | text to outlines | MIT |
 | [PDF.js](https://github.com/mozilla/pdf.js) 3.11 (Mozilla) | reading PDF and AI files | Apache-2.0, see `vendor/pdfjs/LICENSE` |
 | [Ghostscript](https://www.ghostscript.com) (Artifex) via [ghostscript-wasm](https://github.com/jsscheller/ghostscript-wasm) 0.0.2 | opening EPS and old .ai files | AGPL-3.0, see `vendor/ghostscript/LICENSE`. Fine for this internal tool; if the tool were ever offered to the public, its source would have to be offered too. |
+| [pdf-lib](https://github.com/Hopding/pdf-lib) 1.17.1 (Andrew Dillon) | Split PDF: copying pages unchanged | MIT, see `vendor/pdf-lib/LICENSE.md` |
 | [jsPDF](https://github.com/parallax/jsPDF) 2.5 + [svg2pdf.js](https://github.com/yWorks/svg2pdf.js) 2.2 | PDF export | MIT |
 | Gotham Rounded and Gotham (Hoefler&Co) | interface and Text tool | Licensed by Stacked; from the Stacked design system. Check the licence covers web use before hosting the tool publicly. |
 | Fonts via [Fontsource](https://fontsource.org): Inter, Montserrat, Oswald, Bebas Neue, Anton, Playfair Display, Pacifico, Lobster | Text tool | SIL Open Font License 1.1 |

@@ -9,6 +9,7 @@ import { epsToPdf, sniff } from './eps.js';
 import { listZip, unzipEntry } from './zip.js';
 import { LIVE_SERVER } from './config.js';
 import { loadStats, countLoad } from './stats.js';
+import { initSplit, openSplit, savePages } from './split.js';
 
 const $ = s => document.querySelector(s);
 const MAX_INPUT = 2400;       // larger images are scaled down before processing
@@ -43,6 +44,16 @@ function progress(pct, text) {
 const editor = new Editor($('#canvas'), $('#canvasHost'), {
   onChange: () => { $('#undo').disabled = editor.history.length < 2; renderInks(); renderLiveText(); refreshExportSoon(); },
   onSelect: obj => showTextProps(obj && obj.isText ? obj : null),
+});
+
+initSplit();
+window.addEventListener('lps-toast', e => toast(e.detail.msg, e.detail.ms));
+$('#splitOpen').addEventListener('click', () => openSplit());
+$('#pdfPageSave').addEventListener('click', async () => {
+  if (!state.pdf) return;
+  const n = +$('#pdfPage').value || 1;
+  try { await savePages(new Uint8Array(await state.pdf.file.arrayBuffer()), state.pdf.file.name, [n]); toast(`Saved page ${n} as a PDF.`); }
+  catch (e) { console.error(e); toast(e.message, 6000); }
 });
 
 loadStats();

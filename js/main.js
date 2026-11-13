@@ -6,6 +6,7 @@ import { METHODS, runChecks } from './checks.js';
 import { buildSVG, buildEPS, download, pngBlob, rasterPngBlob, pdfBlob, separationsBlob } from './export.js';
 import { proofBlob } from './proof.js';
 import { makeZip } from './zipwrite.js';
+import { cleanGeometry } from './geometry.js';
 import { openPdf, inspectPage, imageData as pdfImage, pageSvg, renderPage, renderRegion } from './pdf.js';
 import { epsToPdf, sniff } from './eps.js';
 import { listZip, unzipEntry } from './zip.js';
@@ -500,13 +501,19 @@ async function run() {
       removeBackground: $('#removeBg').checked, gradientSteps: +$('#gradSteps').value,
     });
     if (!result.layers.length) { toast('Nothing left to trace: try turning off "Remove background".'); return; }
+    let geoNote = '';
+    if ($('#cleanGeo').checked) {
+      const g = cleanGeometry(result.svg);
+      result.svg = g.svg;
+      geoNote = ` Geometry cleaned: ${g.stats.before} → ${g.stats.after} anchor points${g.stats.ellipses ? `, ${g.stats.ellipses} exact circle${g.stats.ellipses > 1 ? 's' : ''}/oval${g.stats.ellipses > 1 ? 's' : ''}` : ''}.`;
+    }
     $('#gradientNote').hidden = !result.gradient;
     state.gradientArt = result.gradient ? gradientArtwork(img, result.keep, result.background) : null;
     $('#gradientInks').textContent = result.layers.length === 1 ? 'one solid ink' : `${result.layers.length} solid inks`;
     $('#empty').hidden = true;
     await editor.setLogo(result.svg);
     if (state.refit) { editor.fitAll(); state.refit = false; }   // after a crop the shape changed: fit it again
-    progress(100, `Done: ${result.layers.length} colour${result.layers.length > 1 ? 's' : ''}, ${result.width} × ${result.height} px traced.`);
+    progress(100, `Done: ${result.layers.length} colour${result.layers.length > 1 ? 's' : ''}, ${result.width} × ${result.height} px traced.${geoNote}`);
     afterLogo();
     if (state.afterRun && !state.pendingRun) { const f = state.afterRun; state.afterRun = null; f(); }
   } catch (e) {
@@ -575,7 +582,7 @@ function afterLogo() {
 
 $('#run').addEventListener('click', run);
 const rerun = debounce(() => { if (state.original && editor.logo) run(); }, 350);
-['#inks', '#removeBg', '#scale', '#quality', '#gradSteps'].forEach(s => $(s).addEventListener('change', rerun));
+['#inks', '#removeBg', '#scale', '#quality', '#gradSteps', '#cleanGeo'].forEach(s => $(s).addEventListener('change', rerun));
 $('#detail').addEventListener('input', e => { $('#detailOut').textContent = e.target.value; rerun(); });
 $('#corners').addEventListener('input', e => {
   const v = +e.target.value; $('#cornersOut').textContent = v < 45 ? 'Sharp' : v > 90 ? 'Smooth' : 'Balanced'; rerun();

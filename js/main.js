@@ -4,6 +4,8 @@ import { vectorise } from './trace.js';
 import { FONTS, addFontFile } from './text.js';
 import { METHODS, runChecks } from './checks.js';
 import { buildSVG, buildEPS, download, pngBlob, rasterPngBlob, pdfBlob, separationsBlob } from './export.js';
+import { proofBlob } from './proof.js';
+import { makeZip } from './zipwrite.js';
 import { openPdf, inspectPage, imageData as pdfImage, pageSvg, renderPage, renderRegion } from './pdf.js';
 import { epsToPdf, sniff } from './eps.js';
 import { listZip, unzipEntry } from './zip.js';
@@ -730,6 +732,7 @@ document.querySelectorAll('.swatch[data-bg]').forEach(b => {
 });
 $('#bgPick').addEventListener('input', e => setGarment(e.target.value, e.target.parentElement));
 function setGarment(bg, btn) {
+  state.garment = bg;
   const host = $('#canvasHost');
   host.classList.toggle('checker', bg === 'checker');
   host.style.background = bg === 'checker' ? '' : bg;
@@ -858,6 +861,7 @@ async function refreshExport() {
   const live = [...new Set(editor.leaves().filter(o => o.visible && /text/i.test(o.type || '')).map(o => o.fontFamily))];
   if (live.length) res.issues.push({ level: 'warn', text: `This artwork still has live text (${live.join(', ')}). The printer may not have that font: use "Convert text to curves" in Colours first.` });
   if ($('#mirror').checked) res.issues = res.issues.filter(i => !/tick \"Mirror\"/.test(i.text));
+  state.extraIssues = res.issues.filter(i => i.flatten || /live text|pasted-in picture|has a gradient/.test(i.text));
   if (res.issues.some(i => i.level === 'warn')) res.issues = res.issues.filter(i => i.level !== 'ok');
   // built as text, never HTML: font names and other values come from imported files
   const checks = $('#checks'); checks.innerHTML = '';
@@ -877,39 +881,93 @@ async function refreshExport() {
 const refreshExportSoon = debounce(refreshExport, 400);
 ['#method', '#widthMm', '#mirror'].forEach(s => $(s).addEventListener('input', refreshExportSoon));
 
-function saveEps(name, r) {
-  if (r.skipped.length) toast(`EPS saved without ${r.skipped.join(', ')} items (pictures or live text). Use PDF for those.`, 5000);
-  return download(name, r.eps, 'application/postscript');
+// File names: client/job, method, colours, width, version. e.g.
+// Harbour_Coffee_screen_2col_250mm_v1.pdf
+function baseName(method) {
+  const o = exportOpts(), built = buildSVG(editor, { ...o, mirror: false });
+  const clean = v => String(v || '').trim().replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+  const job = clean($('#jobName').value) || state.name, ver = clean($('#jobVer').value);
+  const cols = built ? `_${built.inks.length}col` : '';
+  return `${job}_${method}${cols}_${Math.round(o.widthMm)}mm${o.mirror ? '_mirrored' : ''}${ver ? '_' + ver : ''}`;
+}
+
+// Build one export file without downloading it: { name, blob, note }.
+async function makeFile(kind, method) {
+  const o = exportOpts(), base = baseName(method);
+  const single = { ...o, mode: 'single', color: '#000000' };
+  const eps = (name, r) => ({ name, blob: new Blob([r.eps], { type: 'application/postscript' }), note: r.skipped.length ? `EPS saved without ${r.skipped.join(', ')} items (pictures or live text). Use PDF for those.` : '' });
+  const png = (name, r) => ({ name, blob: r.blob, note: `PNG ${r.w} × ${r.h} px at ${r.dpi} dpi` });
+  switch (kind) {
+    case 'eps': return eps(base + '.eps', buildEPS(editor, o));
+    case 'eps-black': return eps(base + '.eps', buildEPS(editor, single));
+    case 'eps-cut': return eps(base + '_cut.eps', buildEPS(editor, { ...o, mode: 'outline', color: 'ink', strokeMm: 0.1 }));
+    case 'eps-hairline': return eps(base + '_cut.eps', buildEPS(editor, { ...o, mode: 'outline', color: '#ff0000', strokeMm: 0.01 }));
+    case 'pdf': return { name: base + '.pdf', blob: await pdfBlob(buildSVG(editor, o)) };
+    case 'pdf-black': return { name: base + '.pdf', blob: await pdfBlob(buildSVG(editor, single)) };
+    case 'pdf-cut': return { name: base + '_cut.pdf', blob: await pdfBlob(buildSVG(editor, { ...o, mode: 'outline', color: 'ink', strokeMm: 0.1 })) };
+    case 'pdf-hairline': return { name: base + '_cut.pdf', blob: await pdfBlob(buildSVG(editor, { ...o, mode: 'outline', color: '#ff0000', strokeMm: 0.01 })) };
+    case 'png': return png(base + '.png', await pngBlob(buildSVG(editor, o), 300));
+    case 'png-black': return png(base + '.png', await pngBlob(buildSVG(editor, single), 600));
+    case 'png-gradient': return png(base + '_gradient.png', await rasterPngBlob(state.gradientArt, o.widthMm, 300, o.mirror));
+    case 'seps': {
+      const r = await separationsBlob(editor, o);
+      return { name: base + '_separations.pdf', blob: r.blob, note: `${r.inks.length} separation page${r.inks.length > 1 ? 's' : ''}` };
+    }
+    case 'proof': return { name: base + '_PROOF.pdf', blob: await makeProof(method) };
+  }
 }
 
 async function doExport(kind, method) {
-  const o = exportOpts();
-  const base = `${state.name}_${method}_${Math.round(o.widthMm)}mm${o.mirror ? '_mirrored' : ''}`;
-  const single = { ...o, mode: 'single', color: '#000000' };
-  switch (kind) {
-    case 'eps': return saveEps(base + '.eps', buildEPS(editor, o));
-    case 'eps-black': return saveEps(base + '.eps', buildEPS(editor, single));
-    case 'eps-cut': return saveEps(base + '_cut.eps', buildEPS(editor, { ...o, mode: 'outline', color: 'ink', strokeMm: 0.1 }));
-    case 'eps-hairline': return saveEps(base + '_cut.eps', buildEPS(editor, { ...o, mode: 'outline', color: '#ff0000', strokeMm: 0.01 }));
-    case 'pdf': return download(base + '.pdf', await pdfBlob(buildSVG(editor, o)));
-    case 'pdf-black': return download(base + '.pdf', await pdfBlob(buildSVG(editor, single)));
-    case 'pdf-cut': return download(base + '_cut.pdf', await pdfBlob(buildSVG(editor, { ...o, mode: 'outline', color: 'ink', strokeMm: 0.1 })));
-    case 'pdf-hairline': return download(base + '_cut.pdf', await pdfBlob(buildSVG(editor, { ...o, mode: 'outline', color: '#ff0000', strokeMm: 0.01 })));
-    case 'png': { const r = await pngBlob(buildSVG(editor, o), 300); toast(`PNG ${r.w} × ${r.h} px at ${r.dpi} dpi`); return download(base + '.png', r.blob); }
-    case 'png-gradient': {
-      const r = await rasterPngBlob(state.gradientArt, o.widthMm, 300, o.mirror);
-      toast(`Gradient PNG ${r.w} × ${r.h} px at ${r.dpi} dpi`);
-      return download(base + '_gradient.png', r.blob);
-    }
-    case 'png-black': { const r = await pngBlob(buildSVG(editor, single), 600); toast(`PNG ${r.w} × ${r.h} px at ${r.dpi} dpi`); return download(base + '.png', r.blob); }
-    case 'seps': {
-      toast('Building separations…');
-      const r = await separationsBlob(editor, o);
-      toast(`${r.inks.length} separation page${r.inks.length > 1 ? 's' : ''}`);
-      return download(base + '_separations.pdf', r.blob);
-    }
-  }
+  if (kind === 'seps') toast('Building separations…');
+  const f = await makeFile(kind, method);
+  if (f.note) toast(f.note, 5000);
+  return download(f.name, f.blob, f.blob.type);
 }
+
+// The proof sheet (js/proof.js) for the current design and method.
+let brandSvg = null;
+async function makeProof(method) {
+  const o = exportOpts(), built = buildSVG(editor, { ...o, mirror: false });
+  if (!built) throw new Error('Nothing visible to put on the proof.');
+  if (brandSvg === null) brandSvg = await fetch($('.brandmark').src).then(r => r.text()).catch(() => '');
+  const res = await runChecks(built, method).catch(() => ({ issues: [] }));
+  const issues = [...(state.extraIssues || []), ...res.issues].filter(i => i.level !== 'ok');
+  if (!issues.length) issues.push({ level: 'ok', text: `No problems found for ${METHODS[method].label.toLowerCase()} at this size.` });
+  return proofBlob({
+    built, method, methodLabel: METHODS[method].label, inks: built.inks, issues,
+    job: $('#jobName').value.trim() || state.name.replace(/_/g, ' '), version: $('#jobVer').value.trim() || 'v1',
+    garment: state.garment, mirrored: o.mirror, liveText: editor.liveTexts().length > 0, logoSvg: brandSvg,
+  });
+}
+
+// Everything for this method in one zip: each file, the proof, a short README.
+async function downloadPack() {
+  const method = $('#method').value, M = METHODS[method];
+  const kinds = [...(state.gradientArt && M.gradients ? ['png-gradient'] : []), ...EXPORTS[method].map(e => e[0]), 'proof'];
+  const btn = $('#packBtn'); btn.disabled = true; btn.textContent = 'Building…';
+  try {
+    const files = [], notes = [];
+    for (const k of kinds) {
+      const f = await makeFile(k, method).catch(e => { notes.push(`${k}: ${e.message}`); return null; });
+      if (f) { files.push({ name: f.name, data: f.blob }); if (f.note) notes.push(`${f.name}: ${f.note}`); }
+    }
+    const o = exportOpts(), built = buildSVG(editor, { ...o, mirror: false });
+    const readme = [
+      `Job: ${$('#jobName').value.trim() || state.name}   Version: ${$('#jobVer').value.trim() || 'v1'}`,
+      `Print method: ${M.label}`,
+      `Print size: ${built.widthMm.toFixed(0)} x ${built.heightMm.toFixed(0)} mm${o.mirror ? ' (mirrored)' : ''}`,
+      `Colours: ${built.inks.length} (${built.inks.map(i => i.toUpperCase()).join(', ')})`,
+      '', 'Files:', ...files.map(f => `  ${f.name}`), ...(notes.length ? ['', 'Notes:', ...notes.map(n => `  ${n}`)] : []),
+      '', 'Made with Logo Prep Studio (Stacked Merch). Colours are approximate: confirm Pantone references with the printer.',
+    ].join('\r\n');
+    files.push({ name: 'README.txt', data: new TextEncoder().encode(readme) });
+    await download(baseName(method) + '.zip', await makeZip(files), 'application/zip');
+    toast(`Saved ${files.length} files in one zip.`);
+  } catch (e) { console.error(e); toast('The pack failed: ' + e.message, 6000); }
+  finally { btn.disabled = false; btn.textContent = 'Download everything (zip)'; }
+}
+$('#packBtn').addEventListener('click', () => downloadPack());
+$('#proofBtn').addEventListener('click', () => doExport('proof', $('#method').value).catch(e => { console.error(e); toast('The proof failed: ' + e.message, 6000); }));
 
 // ---------------------------------------------------------------- presets
 

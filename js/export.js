@@ -130,7 +130,7 @@ async function withDpi(blob, dpi) {
 }
 
 let crcTable;
-function crc32(bytes) {
+export function crc32(bytes) {
   if (!crcTable) {
     crcTable = new Uint32Array(256);
     for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; crcTable[n] = c >>> 0; }
@@ -149,7 +149,7 @@ function svgElement(svg) {
   return { el: holder.firstElementChild, done: () => holder.remove() };
 }
 
-async function addSvgPage(doc, svg, x, y, w, h) {
+export async function addSvgPage(doc, svg, x, y, w, h) {
   const { el, done } = svgElement(svg);
   try { await window.svg2pdf.svg2pdf(el, doc, { x, y, width: w, height: h }); } finally { done(); }
 }

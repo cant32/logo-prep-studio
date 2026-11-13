@@ -179,6 +179,14 @@
         <label class="check" id="mirrorRow"><input type="checkbox" id="mirror"> Mirror (for heat-transfer vinyl)</label>
         <div class="checks" id="checks"></div>
         <img id="checkPreview" class="checkpreview" alt="Print check preview" hidden>
+        <div class="field two jobrow">
+          <div><label for="jobName">Client / job</label><input type="text" id="jobName" placeholder="e.g. Harbour Coffee" autocomplete="off"></div>
+          <div><label for="jobVer">Version</label><input type="text" id="jobVer" value="v1" autocomplete="off"></div>
+        </div>
+        <div class="packrow">
+          <button class="stk-btn primary small" id="packBtn" type="button">Download everything (zip)</button>
+          <button class="stk-btn ghost small" id="proofBtn" type="button">Proof sheet (PDF)</button>
+        </div>
         <div class="exports" id="exports"></div>
       </div>
     </section>

@@ -42,14 +42,18 @@ Use Chrome or Edge. A computer with a graphics card makes the AI upscaling fast 
 
 | Method | Files | Checks |
 |---|---|---|
-| Screen print | Vector PDF (spot colours), **separations PDF** (one black film page per ink, with registration marks), EPS | lines < 0.3 mm, gaps < 0.3 mm, more than 6 inks |
+| Screen print | Vector PDF (flat colours, one layer per ink), **separations PDF** (one black film page per ink, inks on top knock out the ones below, with registration marks), EPS | lines < 0.3 mm, gaps < 0.3 mm, more than 8 inks |
+| Pad print | PDF, separations PDF, EPS | more than 4 inks, logos over about 7 cm, gradients |
+| Sublimation / doming | 300 dpi PNG, PDF (doming adds a shape outline) | full colour; gradients allowed |
+| Glass / ceramic firing | PDF, separations PDF, EPS | spot colours, no gradients |
+| Sandblasting / embossing | Solid black PDF / EPS (stencil or die) | one colour; sandblast up to about 40 cm² |
 | Digital (DTG) / DTF | 300 dpi transparent PNG (DPI written into the file), PDF, EPS | lines < 0.3 / 0.5 mm, gaps |
 | Laser engrave | Solid black PDF / EPS, 600 dpi PNG | lines < 0.15 mm |
 | Vinyl / HTV cut | Cut-line PDF / EPS (outlines, one colour per layer), filled PDF, **mirror option** for heat-transfer vinyl | lines < 1 mm, gaps < 0.8 mm |
 | Laser cut | Red hairline cut PDF / EPS, solid black PDF | lines < 0.8 mm, gaps < 0.5 mm |
-| Embroidery | Clean PDF / EPS / PNG for the digitiser | lines < 1.2 mm |
+| Embroidery | Clean PDF / EPS / PNG for the digitiser | lines < 1.2 mm, more than 15 thread colours |
 
-The checks render the finished design at its real print size and highlight problem areas in red (too thin) and orange (gaps that may fill in). The limits are typical shop guidance; confirm with your printer for unusual materials.
+Colour limits and which methods can print gradients follow Stacked's own Printing technologies page (merch.stacked.ie). The checks render the finished design at its real print size and highlight problem areas in red (too thin) and orange (gaps that may fill in). The limits are typical shop guidance; confirm with your printer for unusual materials.
 
 The preview bar shows the design on white, black, navy, grey, red or any custom garment colour.
 

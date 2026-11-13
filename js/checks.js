@@ -4,14 +4,23 @@
 
 import { svgToCanvas } from './export.js';
 
+// Colour limits and what can print gradients follow Stacked's own
+// "Printing technologies" page (merch.stacked.ie/en/printing-technologies).
+// gradients: the method can print a colour gradient (otherwise flat inks only).
 export const METHODS = {
-  screen:     { label: 'Screen print',          minLine: 0.3,  minGap: 0.3, maxInks: 6 },
-  dtg:        { label: 'Digital print (DTG)',   minLine: 0.3,  minGap: 0.3 },
-  dtf:        { label: 'DTF / transfer',        minLine: 0.5,  minGap: 0.4, mirrorHint: false },
-  engrave:    { label: 'Laser engrave',         minLine: 0.15, minGap: 0.15, single: true },
-  vinyl:      { label: 'Vinyl / HTV cut',       minLine: 1.0,  minGap: 0.8, cut: true },
-  lasercut:   { label: 'Laser cut',             minLine: 0.8,  minGap: 0.5, cut: true, single: true },
-  embroidery: { label: 'Embroidery',            minLine: 1.2,  minGap: 1.0, maxInks: 8 },
+  screen:     { label: 'Screen print',              minLine: 0.3,  minGap: 0.3, maxInks: 8 },
+  pad:        { label: 'Pad print',                 minLine: 0.2,  minGap: 0.2, maxInks: 4, maxSizeMm: 70 },
+  dtg:        { label: 'Digital print (DTG)',       minLine: 0.3,  minGap: 0.3, gradients: true },
+  dtf:        { label: 'DTF / transfer',            minLine: 0.5,  minGap: 0.4, gradients: true },
+  sublimation:{ label: 'Sublimation',               minLine: 0.3,  minGap: 0.3, gradients: true },
+  doming:     { label: 'Doming sticker',            minLine: 0.4,  minGap: 0.4, gradients: true },
+  firing:     { label: 'Glass / ceramic firing',    minLine: 0.3,  minGap: 0.3, maxInks: 4 },
+  embroidery: { label: 'Embroidery',                minLine: 1.2,  minGap: 1.0, maxInks: 15 },
+  engrave:    { label: 'Laser engrave',             minLine: 0.15, minGap: 0.15, single: true },
+  sandblast:  { label: 'Sandblasting',              minLine: 0.4,  minGap: 0.4, single: true, maxAreaCm2: 40 },
+  emboss:     { label: 'Embossing (blind / foil)',  minLine: 0.5,  minGap: 0.5, single: true },
+  vinyl:      { label: 'Vinyl / HTV cut',           minLine: 1.0,  minGap: 0.8, cut: true },
+  lasercut:   { label: 'Laser cut',                 minLine: 0.8,  minGap: 0.5, cut: true, single: true },
 };
 
 // Chamfer distance (in pixels) from each pixel inside `mask` to the nearest
@@ -91,10 +100,16 @@ export async function runChecks(built, method) {
     }
   }
   const inkCount = built.inks.length;
-  if (M.maxInks && inkCount > M.maxInks) issues.push({ level: 'warn', text: `${inkCount} colours: more than ${M.maxInks} is costly for ${M.label.toLowerCase()}. Try merging similar colours.` });
+  if (M.maxInks && inkCount > M.maxInks) issues.push({ level: 'warn', text: `${inkCount} colours: ${M.label.toLowerCase()} prints at most ${M.maxInks}. Merge similar colours, or use "Make one colour".` });
+  if (M.maxSizeMm && Math.max(built.widthMm, built.heightMm) > M.maxSizeMm) issues.push({ level: 'warn', text: `${M.label} suits small logos, up to about ${M.maxSizeMm / 10} cm. This one is ${(built.widthMm / 10).toFixed(1)} × ${(built.heightMm / 10).toFixed(1)} cm.` });
+  if (M.maxAreaCm2 && built.widthMm * built.heightMm / 100 > M.maxAreaCm2) issues.push({ level: 'warn', text: `${M.label} only works on small areas, up to about ${M.maxAreaCm2} cm². This logo is about ${Math.round(built.widthMm * built.heightMm / 100)} cm².` });
+  if (method === 'pad' || method === 'firing') issues.push({ level: 'info', text: `${M.label} uses spot colours: tell the supplier the Pantone for each ink.` });
+  if (method === 'sublimation') issues.push({ level: 'info', text: 'Sublimation prints full colour on polyester only, ideally white. Exact Pantone matches are hard.' });
+  if (method === 'emboss') issues.push({ level: 'info', text: 'Embossing has no ink colour (blind) or one foil colour, and loses fine detail. The supplier makes a die from this file.' });
+  if (method === 'sandblast') issues.push({ level: 'info', text: 'Sandblasting has no colour choice: it frosts the surface.' });
   if (M.single && inkCount > 1) issues.push({ level: 'info', text: `${M.label} is one colour: all ${inkCount} colours will be exported as a single colour.` });
   if (method === 'vinyl') issues.push({ level: 'info', text: 'Heat-transfer vinyl is cut from the back: tick "Mirror" when exporting for HTV.' });
-  if (method === 'embroidery') issues.push({ level: 'info', text: 'Embroidery needs digitising into stitches; send the SVG/PNG to your digitiser. Keep text at least 5 mm tall.' });
+  if (method === 'embroidery') issues.push({ level: 'info', text: 'Embroidery needs digitising into stitches: send the PDF, EPS or PNG to your digitiser. Keep text at least 5 mm tall.' });
   if (!issues.some(i => i.level === 'warn')) issues.unshift({ level: 'ok', text: `No problems found for ${M.label.toLowerCase()} at ${built.widthMm.toFixed(0)} × ${built.heightMm.toFixed(0)} mm.` });
 
   const oc = document.createElement('canvas');

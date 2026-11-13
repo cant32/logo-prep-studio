@@ -75,11 +75,10 @@ async function loadFile(file) {
   const url = URL.createObjectURL(file);
   const img = new Image(); img.src = url;
   try { await img.decode(); } catch { URL.revokeObjectURL(url); toast('That file could not be read as an image.'); return; }
-  const c = new OffscreenCanvas(img.naturalWidth, img.naturalHeight);
-  c.getContext('2d').drawImage(img, 0, 0);
+  const data = imageToData(img);
   setSourceUrl(url);
   vectorCheck('raster', 'Pixel image, not vector: it will be traced to vector for print.');
-  useImage(c.getContext('2d').getImageData(0, 0, c.width, c.height), name || 'Pasted image');
+  useImage(data, name || 'Pasted image');
 }
 
 // PDF, AI, EPS, SVG or zip: what it really is comes from its first bytes,
@@ -261,9 +260,18 @@ function loadSvg(text, file) {
 
 async function decodeImage(src) {
   const img = new Image(); img.src = src; await img.decode();
-  const c = new OffscreenCanvas(img.naturalWidth, img.naturalHeight);
-  c.getContext('2d').drawImage(img, 0, 0);
-  return c.getContext('2d').getImageData(0, 0, c.width, c.height);
+  return imageToData(img);
+}
+
+// A decoded picture as pixels, shrunk on the way in if it is bigger than the
+// app works at, so a huge photo or scan never sits in memory at full size.
+function imageToData(img) {
+  const s = Math.min(1, MAX_INPUT / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.max(1, Math.round(img.naturalWidth * s)), h = Math.max(1, Math.round(img.naturalHeight * s));
+  const c = new OffscreenCanvas(w, h), x = c.getContext('2d');
+  x.imageSmoothingQuality = 'high';
+  x.drawImage(img, 0, 0, w, h);
+  return x.getImageData(0, 0, w, h);
 }
 
 async function rasteriseSvg(svg, size = 2000) {
@@ -376,6 +384,7 @@ async function loadPdf(file, { kind } = {}) {
     console.error(e);
     return toast(/\.ai$/i.test(file.name) ? 'This .ai file has no PDF inside it (old Illustrator format). Re-save it with "Create PDF Compatible File" ticked, or export a PDF or SVG.' : 'That PDF could not be read.', 7000);
   }
+  if (state.pdf?.doc && state.pdf.doc !== doc) state.pdf.doc.destroy().catch(() => {});
   state.pdf = { doc, file, kind };
   const sel = $('#pdfPage'); sel.innerHTML = '';
   for (let i = 1; i <= doc.numPages; i++) sel.add(new Option(`Page ${i} of ${doc.numPages}`, i));
@@ -397,7 +406,7 @@ async function showPdfPage(n, auto) {
   const box = $('#pdfButtons'); box.innerHTML = '';
   const add = (title, sub, fn) => {
     const b = document.createElement('button');
-    b.innerHTML = `<b>${title}</b><span>${sub}</span>`;
+    b.append(Object.assign(document.createElement('b'), { textContent: title }), Object.assign(document.createElement('span'), { textContent: sub }));
     b.addEventListener('click', () => fn().catch(e => { console.error(e); toast('That did not work: ' + e.message, 5000); }));
     box.appendChild(b);
     return fn;
@@ -458,7 +467,10 @@ async function run() {
   if (state.busy) { state.pendingRun = true; return; }
   state.busy = true; $('#run').disabled = true;
   const src = state.original;
-  const scale = $('#scale').value === 'auto' ? autoScale(src.width, src.height) : +$('#scale').value;
+  let scale = $('#scale').value === 'auto' ? autoScale(src.width, src.height) : +$('#scale').value;
+  // never upscale past about 4,000 px: no visible gain, and big enough to crash a tab
+  while (scale > 1 && Math.max(src.width, src.height) * scale > 4000) scale /= 2;
+  if (scale < 2) scale = 1;
   const quality = $('#quality').value;
   try {
     let img = src;
@@ -736,8 +748,10 @@ $('#compare').addEventListener('click', e => {
   }
 });
 document.addEventListener('keydown', e => {
-  if (e.target.closest('input, textarea, select')) return;
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); editor.undo(); }
+  if (e.target.closest('input, textarea, select') || document.querySelector('dialog[open]')) return;
+  const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+  if (mod && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); editor.redo(); }
+  else if (mod && k === 'z') { e.preventDefault(); editor.undo(); }
   else if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); editor.deleteSelected(); }
   else if (e.key === 'Escape' && editor.tool) setTool(editor.tool);
 });
@@ -748,9 +762,9 @@ Object.entries(METHODS).forEach(([k, m]) => $('#method').add(new Option(m.label,
 
 const EXPORTS = {
   screen: [
-    ['pdf', 'Vector PDF', 'Spot colours, actual size, for the printer or RIP'],
+    ['pdf', 'Vector PDF', 'Flat colours, one layer per ink, actual size'],
     ['seps', 'Separations PDF', 'One black film page per ink, with registration marks'],
-    ['eps', 'Vector EPS', 'Spot colours, actual size, text outlined'],
+    ['eps', 'Vector EPS', 'Flat colours, one layer per ink, text outlined'],
   ],
   dtg: [
     ['png', 'Print PNG (300 dpi)', 'Transparent background, full colour'],
@@ -761,6 +775,33 @@ const EXPORTS = {
     ['png', 'Print PNG (300 dpi)', 'Transparent background, full colour'],
     ['pdf', 'Vector PDF', 'Actual size'],
     ['eps', 'Vector EPS', 'Actual size'],
+  ],
+  pad: [
+    ['pdf', 'Vector PDF', 'Flat colours, one layer per ink, actual size'],
+    ['seps', 'Separations PDF', 'One page per ink for the pad plates, with registration marks'],
+    ['eps', 'Vector EPS', 'Flat colours, one layer per ink'],
+  ],
+  sublimation: [
+    ['png', 'Print PNG (300 dpi)', 'Transparent background, full colour'],
+    ['pdf', 'Vector PDF', 'Actual size'],
+  ],
+  doming: [
+    ['png', 'Print PNG (300 dpi)', 'Full colour sticker artwork'],
+    ['pdf', 'Vector PDF', 'Actual size, the outline sets the sticker shape'],
+    ['pdf-cut', 'Shape PDF', 'Outline only, for the sticker cut shape'],
+  ],
+  firing: [
+    ['pdf', 'Vector PDF', 'Flat colours, one layer per ink, actual size'],
+    ['seps', 'Separations PDF', 'One page per ink, with registration marks'],
+    ['eps', 'Vector EPS', 'Flat colours, one layer per ink'],
+  ],
+  sandblast: [
+    ['pdf-black', 'Stencil PDF', 'Solid black, actual size'],
+    ['eps-black', 'Stencil EPS', 'Solid black, actual size'],
+  ],
+  emboss: [
+    ['pdf-black', 'Die PDF', 'Solid black for the die maker, actual size'],
+    ['eps-black', 'Die EPS', 'Solid black, actual size'],
   ],
   engrave: [
     ['pdf-black', 'Engrave PDF', 'Solid black, actual size (LightBurn, RDWorks, etc.)'],
@@ -799,18 +840,33 @@ async function refreshExport() {
   const ex = $('#exports'); ex.innerHTML = '';
   const list = [...EXPORTS[method]];
   // digital print can print a gradient: offer the original artwork first
-  if (state.gradientArt && (method === 'dtg' || method === 'dtf')) list.unshift(['png-gradient', 'Gradient PNG (300 dpi)', 'The original artwork with its gradient kept, upscaled, background cut out. Colour edits and added text made here aren\'t in it']);
+  if (state.gradientArt && M.gradients) list.unshift(['png-gradient', 'Gradient PNG (300 dpi)', 'The original artwork with its gradient kept, upscaled, background cut out. Colour edits and added text made here aren\'t in it']);
   for (const [kind, title, sub] of list) {
     const b = document.createElement('button');
-    b.innerHTML = `<b>${title}</b><span>${sub}</span>`;
+    b.append(Object.assign(document.createElement('b'), { textContent: title }), Object.assign(document.createElement('span'), { textContent: sub }));
     b.addEventListener('click', () => doExport(kind, method).catch(e => { console.error(e); toast('Export failed: ' + e.message, 5000); }));
     ex.appendChild(b);
   }
   const res = await runChecks(built, method);
+  if (state.gradientArt && !M.gradients) res.issues.push({ level: 'info', text: `This logo has a gradient. ${M.label} can't print gradients, so it goes out as the flat inks shown. Gradients only print with DTG, DTF, sublimation or doming.` });
+  const lost = editor.unexportable();
+  if (lost.gradients.length) res.issues.unshift({ level: 'warn', text: `${lost.gradients.length} shape${lost.gradients.length > 1 ? 's have' : ' has'} a gradient fill and will be missing from these files. Use "Flatten gradients" below, or trace the logo instead.`, flatten: true });
+  if (lost.pictures.length) res.issues.unshift({ level: 'warn', text: `${lost.pictures.length} pasted-in picture${lost.pictures.length > 1 ? 's' : ''} will be missing from these files: trace the logo to turn ${lost.pictures.length > 1 ? 'them' : 'it'} into vector.` });
   const live = [...new Set(editor.leaves().filter(o => o.visible && /text/i.test(o.type || '')).map(o => o.fontFamily))];
   if (live.length) res.issues.push({ level: 'warn', text: `This artwork still has live text (${live.join(', ')}). The printer may not have that font: use "Convert text to curves" in Colours first.` });
   if ($('#mirror').checked) res.issues = res.issues.filter(i => !/tick \"Mirror\"/.test(i.text));
-  $('#checks').innerHTML = res.issues.map(i => `<div class="${i.level}">${i.text}</div>`).join('');
+  if (res.issues.some(i => i.level === 'warn')) res.issues = res.issues.filter(i => i.level !== 'ok');
+  // built as text, never HTML: font names and other values come from imported files
+  const checks = $('#checks'); checks.innerHTML = '';
+  for (const i of res.issues) {
+    const d = document.createElement('div'); d.className = i.level; d.textContent = i.text;
+    if (i.flatten) {
+      const b = Object.assign(document.createElement('button'), { className: 'stk-btn ghost small', type: 'button', textContent: 'Flatten gradients' });
+      b.style.marginTop = '6px'; b.addEventListener('click', () => { const n = editor.flattenGradients(); toast(`Flattened ${n} gradient${n > 1 ? 's' : ''} to solid colours.`); });
+      d.append(document.createElement('br'), b);
+    }
+    checks.appendChild(d);
+  }
   const img = $('#checkPreview');
   img.hidden = !res.issues.some(i => i.level === 'warn');
   img.src = res.preview;

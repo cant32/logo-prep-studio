@@ -209,6 +209,37 @@ export class Editor {
     return removed;
   }
 
+  // Visible shapes the print exports can't include: gradient or pattern fills
+  // and pasted-in pictures (exports are flat inks).
+  unexportable() {
+    const out = { gradients: [], pictures: [] };
+    for (const o of this.leaves()) {
+      if (o.visible === false || o.isCropBox) continue;
+      if (o.type === 'image') out.pictures.push(o);
+      else if ((o.fill && typeof o.fill === 'object') || (o.stroke && typeof o.stroke === 'object')) out.gradients.push(o);
+    }
+    return out;
+  }
+
+  // Turn gradient fills into one flat colour: the middle of the gradient.
+  flattenGradients() {
+    const mid = g => {
+      const stops = (g.colorStops || []).slice().sort((a, b) => a.offset - b.offset);
+      if (!stops.length) return '#000000';
+      const c = stops.map(s => new Color(s.color).getSource());
+      const avg = [0, 1, 2].map(k => Math.round(c.reduce((n, v) => n + v[k], 0) / c.length));
+      return '#' + avg.map(v => v.toString(16).padStart(2, '0')).join('');
+    };
+    let n = 0;
+    for (const o of this.unexportable().gradients) {
+      if (o.fill && typeof o.fill === 'object') o.set('fill', mid(o.fill));
+      if (o.stroke && typeof o.stroke === 'object') o.set('stroke', mid(o.stroke));
+      n++;
+    }
+    if (n) { this.canvas.requestRenderAll(); this.commit(); }
+    return n;
+  }
+
   // false for shapes inside a hidden group
   isShown(o) { for (let g = o.group; g; g = g.group) if (g.visible === false) return false; return true; }
 
@@ -229,6 +260,8 @@ export class Editor {
     const { objects } = await loadSVGFromString(splitCompoundPaths(liftTextStyle(svg)));
     const shapes = objects.filter(Boolean);
     for (const s of shapes) {
+      // font names come from the imported file: keep characters that can't break the SVG we write
+      if (typeof s.fontFamily === 'string') s.fontFamily = s.fontFamily.replace(/[<>"&\\]/g, '').trim() || 'sans-serif';
       s.fill = normColor(s.fill) || s.fill;
       if (s.stroke) s.stroke = normColor(s.stroke) || s.stroke;
       s.objectCaching = false;
@@ -430,22 +463,36 @@ export class Editor {
 
   commit() {
     this.history.push(JSON.stringify(this.canvas.toObject(KEEP)));
-    if (this.history.length > 40) this.history.shift();
+    this.future = [];
+    // keep up to 40 steps, but not more than ~80 MB of them (big traced logos)
+    let size = this.history.reduce((n, h) => n + h.length, 0);
+    while (this.history.length > 2 && (this.history.length > 40 || size > 80e6)) size -= this.history.shift().length;
     this.onChange();
   }
 
-  async undo() {
-    if (this.history.length < 2) return;
-    this.history.pop();
-    await this.canvas.loadFromJSON(JSON.parse(this.history[this.history.length - 1]));
+  async restore(json) {
+    await this.canvas.loadFromJSON(JSON.parse(json));
     for (const o of this.canvas.getObjects()) o.selectable = !this.tool;
     this.canvas.requestRenderAll();
     this.onChange();
   }
 
+  async undo() {
+    if (this.history.length < 2) return;
+    (this.future ||= []).push(this.history.pop());
+    await this.restore(this.history[this.history.length - 1]);
+  }
+
+  async redo() {
+    if (!this.future?.length) return;
+    const next = this.future.pop();
+    this.history.push(next);
+    await this.restore(next);
+  }
+
   clear() {
     this.canvas.clear();
-    this.history = [];
+    this.history = []; this.future = [];
     this.onChange();
   }
 }

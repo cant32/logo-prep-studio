@@ -17,7 +17,9 @@ export function bounds(leaves) {
 }
 
 // opts.mode: 'color' | 'single' (every ink -> one colour) | 'outline' (cut lines)
-// opts.only: keep just this ink (for separations)   opts.mirror: flip for transfers
+//   | 'knockout' (separation film for opts.only: that ink black, every other ink
+//     white, in stacking order, so an ink printed on top clears the ones below)
+// opts.only: keep just this ink   opts.mirror: flip for transfers
 export function buildSVG(editor, { widthMm, mode = 'color', color = '#000000', only = null, mirror = false, strokeMm = 0.02 } = {}) {
   const leaves = editor.leaves().filter(o => o.visible && (normColor(o.fill) || normColor(o.stroke)));
   const box = bounds(leaves);
@@ -26,9 +28,13 @@ export function buildSVG(editor, { widthMm, mode = 'color', color = '#000000', o
   const byInk = new Map();
   for (const o of leaves) {
     const ink = normColor(o.fill) || normColor(o.stroke);
-    if (only && ink !== only) continue;
+    if (only && ink !== only && mode !== 'knockout') continue;
     const saved = { fill: o.fill, stroke: o.stroke, strokeWidth: o.strokeWidth };
-    if (mode === 'single') {
+    if (mode === 'knockout') {
+      const c = ink === only ? '#000000' : '#ffffff';
+      if (normColor(o.fill)) o.fill = c;
+      if (normColor(o.stroke)) o.stroke = c;
+    } else if (mode === 'single') {
       if (normColor(o.fill)) o.fill = color;
       if (normColor(o.stroke)) o.stroke = color;
     } else if (mode === 'outline') {
@@ -40,8 +46,9 @@ export function buildSVG(editor, { widthMm, mode = 'color', color = '#000000', o
     const m = o.group ? o.group.calcTransformMatrix() : ID;
     const el = `<g transform="matrix(${m.map(v => +v.toFixed(5)).join(' ')})">${o.toSVG()}</g>`;
     Object.assign(o, saved);
-    if (!byInk.has(ink)) byInk.set(ink, []);
-    byInk.get(ink).push(el);
+    const key = mode === 'knockout' ? 'film' : ink;   // films keep the stacking order
+    if (!byInk.has(key)) byInk.set(key, []);
+    byInk.get(key).push(el);
   }
   const groups = [...byInk].map(([ink, els]) => `<g id="ink-${ink.slice(1)}">${els.join('')}</g>`).join('');
   const flip = mirror ? ` transform="matrix(-1 0 0 1 ${+(2 * box.x + box.w).toFixed(3)} 0)"` : '';
@@ -85,9 +92,14 @@ export async function pngBlob(built, dpi = 300) {
   const max = 12000;
   let w = Math.round(built.widthMm / 25.4 * dpi), h = Math.round(built.heightMm / 25.4 * dpi);
   if (Math.max(w, h) > max) { const s = max / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); dpi *= s; }
-  const c = await svgToCanvas(built.svg, w, h);
-  const blob = await new Promise(r => c.toBlob(r, 'image/png'));
-  return { blob: await withDpi(blob, dpi), w, h, dpi: Math.round(dpi) };
+  // a canvas the browser can't allocate gives no image: step down until it fits
+  for (;;) {
+    const c = await svgToCanvas(built.svg, w, h);
+    const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+    if (blob) return { blob: await withDpi(blob, dpi), w, h, dpi: Math.round(dpi) };
+    if (dpi < 100) throw new Error('This print size is too big for the browser to make a PNG. Use the PDF or EPS instead.');
+    w = Math.round(w * 0.7); h = Math.round(h * 0.7); dpi *= 0.7;
+  }
 }
 
 // A picture (the gradient artwork) at its real print size and resolution.
@@ -101,6 +113,7 @@ export async function rasterPngBlob(source, widthMm, dpi = 300, mirror = false) 
   if (mirror) { x.translate(w, 0); x.scale(-1, 1); }
   x.drawImage(source, 0, 0, w, h);
   const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+  if (!blob) throw new Error('This print size is too big for the browser to make a PNG. Try a smaller width.');
   return { blob: await withDpi(blob, dpi), w, h, dpi: Math.round(dpi) };
 }
 
@@ -130,7 +143,8 @@ function crc32(bytes) {
 function svgElement(svg) {
   const holder = document.createElement('div');
   holder.style.cssText = 'position:fixed;left:-99999px;top:0;width:10px;height:10px;overflow:hidden';
-  holder.innerHTML = svg;
+  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+  holder.appendChild(document.importNode(doc.documentElement, true));
   document.body.appendChild(holder);
   return { el: holder.firstElementChild, done: () => holder.remove() };
 }
@@ -159,7 +173,7 @@ export async function separationsBlob(editor, opts, inkNames = {}) {
   for (let i = 0; i < full.inks.length; i++) {
     const ink = full.inks[i];
     if (i) doc.addPage([W, H], W > H ? 'l' : 'p');
-    const sep = buildSVG(editor, { ...opts, mode: 'single', color: '#000000', only: ink });
+    const sep = buildSVG(editor, { ...opts, mode: 'knockout', only: ink });
     // keep every page on the full artwork's frame so the screens register
     const frame = full.svg.match(/viewBox="([^"]+)"/)[1];
     await addSvgPage(doc, sep.svg.replace(/viewBox="[^"]+"/, `viewBox="${frame}"`), m, m, full.widthMm, full.heightMm);

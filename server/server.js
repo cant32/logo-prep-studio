@@ -100,11 +100,13 @@ const FILE_KINDS = [
   ['eps', b => b.slice(0, 4).equals(Buffer.from([0xc5, 0xd0, 0xd3, 0xc6])) || b.slice(0, 4).toString() === '%!PS'],
   ['zip', b => b.slice(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))],
   ['svgz', b => b[0] === 0x1f && b[1] === 0x8b],
-  ['svg', b => /<svg\b/i.test(b.slice(0, 4000).toString('utf8'))],
+  // an SVG has to start as one (allowing an XML declaration, comments, doctype)
+  ['svg', b => /^\uFEFF?\s*(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*(<!DOCTYPE[^>]*>\s*)?(<!--[\s\S]*?-->\s*)*<svg\b/i.test(b.slice(0, 4000).toString('utf8'))],
 ];
 async function sendRemoteFile(res, target) {
   const started = Date.now();
   try {
+    if (!wasOffered(target)) throw Object.assign(new Error('That file wasn\'t found by a search. Search the website again, then pick it.'), { status: 403 });
     const r = await safeGet(target, { maxBytes: 60_000_000, timeoutMs: 45_000 });
     if (r.status >= 400) throw Object.assign(new Error(`The site answered ${r.status} for that file.`), { status: 502 });
     const kind = (FILE_KINDS.find(([, test]) => test(r.body)) || [])[0];
@@ -143,8 +145,31 @@ if (process.getuid && process.getuid() === 0) {
       for (const f of fsSync.readdirSync(data)) fsSync.chownSync(path.join(data, f), NODE_UID, NODE_GID);
     }
   } catch (e) { console.log(`data folder not prepared: ${e.message}`); }
+  try { process.setgroups([]); } catch { /* not supported here */ }
   process.setgid(NODE_GID); process.setuid(NODE_UID);
 }
+
+// The visitor's address. Railway's proxy appends the address it saw to
+// X-Forwarded-For, so the LAST entry is the real one; earlier entries are
+// whatever the browser sent and can be made up to dodge the rate limits.
+function clientIp(req) {
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',').map(x => x.trim()).filter(Boolean);
+  return fwd.length ? fwd[fwd.length - 1] : String(req.socket.remoteAddress || '');
+}
+
+// Downloads the app may fetch through /api/file: only files a recent search
+// found, so the endpoint can't be used to fetch arbitrary addresses.
+const offered = new Map();   // url -> time offered
+export function rememberOffered(urls) {
+  const now = Date.now();
+  for (const u of urls) offered.set(u, now);
+  if (offered.size > 5000) for (const [u, t] of offered) if (now - t > 3_600_000) offered.delete(u);
+}
+const wasOffered = u => { const t = offered.get(u); return t && Date.now() - t < 3_600_000; };
+
+// Searches fetch several pages each: cap how many run at once.
+let searching = 0;
+const MAX_SEARCHES = 6;
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -152,7 +177,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/stats') {
       if (req.method === 'OPTIONS') { res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST' }); return res.end(); }
       if (req.method === 'POST') {
-        const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+        const ip = clientIp(req);
         const event = url.searchParams.get('e');
         if (statAllowed(ip)) count(event);
       }
@@ -161,12 +186,16 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/logos') {
       if (req.method === 'OPTIONS') { res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET' }); return res.end(); }
       if (req.method !== 'GET') return json(res, 405, { error: 'Use GET.' });
-      const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+      const ip = clientIp(req);
       if (!allowed(ip)) return json(res, 429, { error: 'Too many searches in a minute. Wait a moment and try again.' });
       const site = url.searchParams.get('url');
       const started = Date.now();
       try {
-        const result = await findLogos(site);
+        if (searching >= MAX_SEARCHES) return json(res, 503, { error: 'The search is busy. Try again in a few seconds.' });
+        searching++;
+        let result;
+        try { result = await findLogos(site); } finally { searching--; }
+        rememberOffered((result.files || []).map(f => f.url));
         console.log(`logos ${result.host} ${result.candidates.length} found in ${Date.now() - started}ms`);
         return json(res, 200, result);
       } catch (e) {
@@ -177,7 +206,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/file') {
       if (req.method === 'OPTIONS') { res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET' }); return res.end(); }
       if (req.method !== 'GET') return json(res, 405, { error: 'Use GET.' });
-      const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+      const ip = clientIp(req);
       if (!allowed(ip)) return json(res, 429, { error: 'Too many requests in a minute. Wait a moment and try again.' });
       return sendRemoteFile(res, url.searchParams.get('url'));
     }

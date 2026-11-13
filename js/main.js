@@ -4,7 +4,7 @@ import { vectorise } from './trace.js';
 import { FONTS, addFontFile } from './text.js';
 import { METHODS, runChecks } from './checks.js';
 import { buildSVG, buildEPS, download, pngBlob, rasterPngBlob, pdfBlob, separationsBlob } from './export.js';
-import { openPdf, inspectPage, imageData as pdfImage, pageSvg, renderPage } from './pdf.js';
+import { openPdf, inspectPage, imageData as pdfImage, pageSvg, renderPage, renderRegion } from './pdf.js';
 import { epsToPdf, sniff } from './eps.js';
 import { listZip, unzipEntry } from './zip.js';
 import { LIVE_SERVER } from './config.js';
@@ -189,6 +189,7 @@ function counted(label) {
 // Start the enhance + trace pipeline on a raster image.
 function useImage(id, label, note = '') {
   counted(label);
+  state.pdfSource = null;   // set again by the PDF page path, which can re-draw crops sharp
   $('#gradSteps').value = '0';   // a new logo starts with its gradient as traced
   const s = Math.min(1, MAX_INPUT / Math.max(id.width, id.height));
   if (s < 1) id = resize(id, Math.round(id.width * s), Math.round(id.height * s));
@@ -427,7 +428,8 @@ async function showPdfPage(n, auto) {
   actions.page = add('Trace the whole page', 'Renders everything on the page, then traces it', async () => {
     const id = await renderPage(info.page);
     setSourceUrl(imageDataUrl(id));
-    useImage(id, label, ' · page rendered from ' + kind);
+    useImage(id, label, ' · page rendered from ' + kind + ' · Crop re-draws sharp from the PDF');
+    state.pdfSource = id.region ? { page: info.page, region: id.region } : null;
   });
   $('#pdfChoice').hidden = false;
   $('#source').hidden = false;
@@ -501,6 +503,7 @@ async function run() {
     $('#gradientInks').textContent = result.layers.length === 1 ? 'one solid ink' : `${result.layers.length} solid inks`;
     $('#empty').hidden = true;
     await editor.setLogo(result.svg);
+    if (state.refit) { editor.fitAll(); state.refit = false; }   // after a crop the shape changed: fit it again
     progress(100, `Done: ${result.layers.length} colour${result.layers.length > 1 ? 's' : ''}, ${result.width} × ${result.height} px traced.`);
     afterLogo();
     if (state.afterRun && !state.pendingRun) { const f = state.afterRun; state.afterRun = null; f(); }
@@ -956,7 +959,7 @@ $('#cropBtn').addEventListener('click', () => {
 });
 $('#cropCancel').addEventListener('click', () => crop.dlg.close());
 $('#cropReset').addEventListener('click', () => {
-  if (state.uncropped) { state.original = state.uncropped; state.uncropped = null; state.upscaled.clear(); run(); }
+  if (state.uncropped) { state.original = state.uncropped; state.uncropped = null; state.upscaled.clear(); state.refit = true; run(); }
   crop.dlg.close();
 });
 $('#cropApply').addEventListener('click', () => {
@@ -965,16 +968,30 @@ $('#cropApply').addEventListener('click', () => {
   const sx = src.width / crop.img.clientWidth, sy = src.height / crop.img.clientHeight;
   const x = Math.round(crop.rect.x * sx), y = Math.round(crop.rect.y * sy);
   const w = Math.max(1, Math.round(crop.rect.w * sx)), h = Math.max(1, Math.round(crop.rect.h * sy));
+  crop.dlg.close();
+  const pdf = state.pdfSource;
+  if (pdf) {
+    // from a PDF: draw just the cropped area again, sharp, instead of enlarging pixels
+    const R = pdf.region, region = { x: R.x + x / src.width * R.w, y: R.y + y / src.height * R.h, w: w / src.width * R.w, h: h / src.height * R.h };
+    renderRegion(pdf.page, region, 2400).then(id => {
+      state.uncropped = src; state.original = id; state.upscaled.clear(); state.refit = true;
+      $('#sourceInfo').textContent = `Cropped and re-drawn from the PDF at ${id.width} × ${id.height} px`;
+      run();
+    }).catch(e => { console.error(e); toast('Re-drawing from the PDF failed: ' + e.message, 5000); });
+    return;
+  }
   const c = new OffscreenCanvas(src.width, src.height); c.getContext('2d').putImageData(src, 0, 0);
   state.uncropped = src;
   state.original = c.getContext('2d').getImageData(x, y, w, h);
-  state.upscaled.clear();
-  crop.dlg.close();
+  state.upscaled.clear(); state.refit = true;
   $('#sourceInfo').textContent = `Cropped to ${w} × ${h} px` + (Math.max(w, h) < 600 ? ' · will be upscaled' : '');
   run();
 });
 const wrap = $('#cropWrap');
-wrap.addEventListener('pointerdown', e => {
+// the drag can start anywhere in the dialog (just outside the picture's
+// edge is natural), not only on the picture itself; it is clamped to it
+crop.dlg.addEventListener('pointerdown', e => {
+  if (e.target.closest('button, .row') || e.button > 0) return;
   const r = crop.img.getBoundingClientRect();
   const at = ev => ({ x: Math.min(Math.max(ev.clientX - r.left, 0), r.width), y: Math.min(Math.max(ev.clientY - r.top, 0), r.height) });
   const a = at(e);

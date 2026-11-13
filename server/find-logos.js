@@ -13,6 +13,71 @@ const MAX_CANDIDATES = 8;
 // little detail left to make a print logo from
 const MIN_PICTURE = 300;
 
+// Site builders serve resized copies with the size in the address. These
+// rules ask for the uploaded original instead; the search fetches both and
+// keeps whichever is bigger, so a wrong guess costs nothing.
+export function originalUrls(u) {
+  let x; try { x = new URL(u); } catch { return []; }
+  const h = x.hostname, p = x.pathname, out = [];
+  const bare = path => x.origin + path;
+  if (h === 'static.wixstatic.com' && p.includes('/v1/')) out.push(bare(p.slice(0, p.indexOf('/v1/'))));      // Wix: drop /v1/fill/w_…
+  if (/squarespace-cdn\.com$/.test(h) && x.search) out.push(bare(p));                                          // Squarespace: drop ?format=300w
+  if (h === 'cdn.shopify.com' || p.includes('/cdn/shop/')) {                                                    // Shopify: logo_200x.png
+    const q = p.replace(/_(?:\d+x\d*|x\d+)(?:_crop_[a-z]+)?(?:@\dx)?(?=\.[a-z0-9]+$)/i, '').replace(/_crop_[a-z]+(?=\.[a-z0-9]+$)/i, '');
+    if (q !== p || x.search) out.push(bare(q));
+  }
+  if (p.includes('/wp-content/uploads/')) {                                                                     // WordPress: logo-300x120.png, -scaled
+    const q = p.replace(/-\d+x\d+(?=\.[a-z0-9]+$)/i, '').replace(/-scaled(?=\.[a-z0-9]+$)/i, '');
+    if (q !== p || x.search) out.push(bare(q));
+  }
+  if (/^i[0-3]\.wp\.com$/.test(h)) out.push('https://' + p.slice(1));                                           // Jetpack's image CDN
+  if (h === 'img1.wsimg.com' && p.includes('/:/')) out.push(bare(p.slice(0, p.indexOf('/:/'))));              // GoDaddy: /:/rs=w:300
+  if (/website-files\.com$|webflow\.com$/.test(h)) { const q = p.replace(/-p-\d+(?=\.[a-z0-9]+$)/i, ''); if (q !== p) out.push(bare(q)); }  // Webflow -p-500
+  if (p.endsWith('/_next/image') && x.searchParams.get('url')) { try { out.push(new URL(x.searchParams.get('url'), x.origin).href); } catch { /* bad url */ } }  // Next.js
+  if (h === 'res.cloudinary.com') { const q = p.replace(/\/image\/upload\/(?:[a-z]{1,3}_[^/]+\/)+/i, '/image/upload/'); if (q !== p) out.push(bare(q)); }  // Cloudinary transforms
+  if (/[?&](?:w|h|width|height|resize|fit|size|format)=/i.test(x.search) && !p.endsWith('/_next/image')) out.push(bare(p));                   // imgix, Netlify, Vercel…
+  return [...new Set(out)].filter(v => v !== u);
+}
+
+// Every image address a tag offers (src, lazy-load copies, every srcset
+// entry), largest srcset entry first.
+function tagSources(tag, before = '') {
+  const set = [];
+  const fromSrcset = v => v.split(/,\s+(?=\S)/).map(e => { const [u, d] = e.trim().split(/\s+/); return { u, n: parseFloat(d) * (/x$/.test(d || '') ? 1000 : 1) || 0 }; }).filter(e => e.u);
+  for (const a of ['srcset', 'data-srcset', 'data-lazy-srcset']) set.push(...fromSrcset(attr(tag, a)));
+  // <picture><source srcset> before the <img>
+  for (const m of before.matchAll(/<source\b[^>]*>/gi)) set.push(...fromSrcset(attr(m[0], 'srcset') || attr(m[0], 'data-srcset')));
+  set.sort((a, b) => b.n - a.n);
+  const singles = ['data-orig-file', 'data-large-file', 'data-image', 'data-lazy-src', 'data-original', 'data-src', 'src'].map(a => attr(tag, a)).filter(Boolean);
+  return [...new Set([...set.map(e => e.u), ...singles])].filter(u => !u.startsWith('data:image/gif'));
+}
+
+// WordPress keeps the site logo and every upload in a public data feed.
+async function wordpressLogos(html, pageUrl, brandWord) {
+  if (!/wp-content|api\.w\.org/i.test(html)) return [];
+  const link = html.match(/<link\b[^>]*rel=["']https:\/\/api\.w\.org\/["'][^>]*>/i);
+  const api = link && attr(link[0], 'href') ? new URL(decode(attr(link[0], 'href')), pageUrl).href : new URL('/wp-json/', pageUrl).href;
+  const getJson = async u => JSON.parse((await safeGet(u, { accept: 'application/json', maxBytes: 4_000_000, timeoutMs: 6000 })).body.toString('utf8'));
+  const route = r => api.includes('rest_route=') ? `${api}${r}` : new URL(r.replace(/^\//, ''), api.endsWith('/') ? api : api + '/').href;
+  const out = [];
+  const asCandidate = (m, source, score) => {
+    const url = m.source_url, mime = String(m.mime_type || '');
+    if (!url) return;
+    const title = String(m.title?.rendered || m.slug || '');
+    if (/^image\//.test(mime)) out.push({ url, kind: /svg/.test(mime) ? 'svg-url' : 'image-url', source, score });
+    else if (/pdf|postscript|illustrator|zip/.test(mime)) out.push({ url, file: true, format: /pdf/.test(mime) ? 'pdf' : /zip/.test(mime) ? 'zip' : /illustrator/.test(mime) ? 'ai' : 'eps', name: url.split('/').pop(), source, title });
+  };
+  try {
+    const index = await getJson(api);
+    if (index.site_logo) asCandidate(await getJson(route(`/wp/v2/media/${index.site_logo}`)), 'WordPress site logo', 110);
+  } catch { /* feed off or no site logo set */ }
+  try {
+    const list = await getJson(route('/wp/v2/media?search=logo&per_page=30'));
+    if (Array.isArray(list)) for (const m of list) asCandidate(m, 'WordPress media library', 60 + (new RegExp(brandWord, 'i').test(m.source_url || '') ? 10 : 0));
+  } catch { /* feed off */ }
+  return out;
+}
+
 // Width and height of a PNG, JPEG, GIF or WebP from its first bytes.
 export function imageSize(b) {
   try {
@@ -121,14 +186,16 @@ export async function findLogos(siteUrl) {
     add('inline:' + index, { kind: 'svg', source: 'In the page', score, svg: clean });
   }
 
-  // 2. <img> tags, srcset, data-src
+  // 2. <img> tags: the largest of every address the tag (and its <picture>) offers
   for (const m of html.matchAll(/<img\b[^>]*>/gi)) {
     const tag = m[0];
-    const src = attr(tag, 'src') || attr(tag, 'data-src') || (attr(tag, 'srcset').split(/\s+/)[0] || '');
-    if (!src || src.startsWith('data:image/gif')) continue;
+    const pic = html.lastIndexOf('<picture', m.index) > html.lastIndexOf('</picture', m.index) ? html.slice(html.lastIndexOf('<picture', m.index), m.index) : '';
+    const srcs = tagSources(tag, pic);
+    const src = srcs[0];
+    if (!src) continue;
     const url = src.startsWith('data:') ? src : abs(src);
     if (!url) continue;
-    const label = [attr(tag, 'alt'), attr(tag, 'class'), attr(tag, 'id'), src].join(' ');
+    const label = [attr(tag, 'alt'), attr(tag, 'class'), attr(tag, 'id'), ...srcs].join(' ');
     const isSvg = isSvgUrl(url);
     const logoish = looksLogo(label) || looksLogo(context(html, m.index).slice(-300)) || new RegExp(brandWord, 'i').test(label);
     if (!isSvg && !logoish) continue;
@@ -162,41 +229,59 @@ export async function findLogos(siteUrl) {
   }
 
   // 4. press / brand / media-kit pages: follow a few and collect their downloads
-  const brandPages = await scanBrandPages(html, page.url, abs, brandWord, files, add);
+  // 5. WordPress: the site logo and logo uploads from its public media feed
+  const [brandPages, wp] = await Promise.all([scanBrandPages(html, page.url, abs, brandWord, files, add), wordpressLogos(html, page.url, brandWord)]);
+  for (const c of wp) {
+    if (c.file) { if (!files.has(c.url)) files.set(c.url, { format: c.format, source: c.source, url: c.url, name: decodeURIComponent(c.name).slice(0, 120), score: 95, maybe: false }); }
+    else add(c.url, { kind: c.kind, source: c.source, score: c.score, url: c.url });
+  }
 
-  // Fetch the best few. SVGs come back as text; pictures as data URIs.
+  // Fetch the best few, 4 at a time. SVGs come back as text; pictures as
+  // data URIs. For each picture the original upload is tried too, and the
+  // bigger one kept.
   const ranked = [...found.values()].sort((a, b) => b.score - a.score).slice(0, MAX_CANDIDATES * 3);
   const results = [];
   let tooSmall = 0;
-  for (const c of ranked) {
-    if (results.length >= MAX_CANDIDATES) break;
+  const fetchOne = async c => {
     try {
-      if (c.kind === 'svg') { results.push({ type: 'svg', source: c.source, svg: c.svg }); continue; }
+      if (c.kind === 'svg') return { type: 'svg', source: c.source, svg: c.svg, score: c.score };
       if (c.url.startsWith('data:')) {
         if (c.url.startsWith('data:image/svg')) {
           const comma = c.url.indexOf(','), meta = c.url.slice(0, comma);
           const text = /;base64/.test(meta) ? Buffer.from(c.url.slice(comma + 1), 'base64').toString('utf8') : decodeURIComponent(c.url.slice(comma + 1));
-          results.push({ type: 'svg', source: c.source, svg: cleanSvg(text) });
-        } else if (c.url.length < 2_800_000) {
-          const size = imageSize(Buffer.from(c.url.slice(c.url.indexOf(',') + 1), 'base64'));
-          if (size && Math.max(size.w, size.h) < MIN_PICTURE) { tooSmall++; continue; }
-          results.push({ type: 'image', source: c.source, dataUrl: c.url, ...(size || {}) });
+          return { type: 'svg', source: c.source, svg: cleanSvg(text), score: c.score };
         }
-        continue;
+        if (c.url.length >= 2_800_000) return null;
+        const size = imageSize(Buffer.from(c.url.slice(c.url.indexOf(',') + 1), 'base64'));
+        if (size && Math.max(size.w, size.h) < MIN_PICTURE) { tooSmall++; return null; }
+        return { type: 'image', source: c.source, dataUrl: c.url, ...(size || {}), score: c.score };
       }
-      const res = await safeGet(c.url, { maxBytes: 2_000_000, timeoutMs: 8000 });
-      const type = res.contentType.split(';')[0].trim().toLowerCase();
-      const gz = res.body[0] === 0x1f && res.body[1] === 0x8b;
-      const text = gz ? '' : res.body.slice(0, 600).toString('utf8');
-      if (type === 'image/svg+xml' || /<svg\b/i.test(text) || gz && isSvgUrl(c.url)) {
-        results.push({ type: 'svg', source: c.source, svg: cleanSvg(svgText(res.body)), url: c.url });
-      } else if (/^image\/(png|jpe?g|webp|gif)$/.test(type)) {
-        const size = imageSize(res.body);
-        if (size && Math.max(size.w, size.h) < MIN_PICTURE) { tooSmall++; continue; }
-        results.push({ type: 'image', source: c.source, dataUrl: `data:${type};base64,${res.body.toString('base64')}`, url: c.url, ...(size || {}) });
+      let best = null;
+      for (const u of [...originalUrls(c.url), c.url]) {
+        let res;
+        try { res = await safeGet(u, { maxBytes: 4_000_000, timeoutMs: 8000 }); } catch { continue; }
+        const type = res.contentType.split(';')[0].trim().toLowerCase();
+        const gz = res.body[0] === 0x1f && res.body[1] === 0x8b;
+        const text = gz ? '' : res.body.slice(0, 600).toString('utf8');
+        if (type === 'image/svg+xml' || /<svg\b/i.test(text) || gz && isSvgUrl(u)) return { type: 'svg', source: c.source, svg: cleanSvg(svgText(res.body)), url: u, score: c.score };
+        if (!/^image\/(png|jpe?g|webp|gif)$/.test(type)) continue;
+        const size = imageSize(res.body) || { w: 0, h: 0 };
+        if (!best || size.w * size.h > best.w * best.h) best = { type: 'image', source: c.source, dataUrl: `data:${type};base64,${res.body.toString('base64')}`, url: u, ...size, original: u !== c.url, score: c.score };
       }
-    } catch { /* skip candidates that don't load */ }
+      if (!best) return null;
+      if (best.w && Math.max(best.w, best.h) < MIN_PICTURE) { tooSmall++; return null; }
+      if (best.original) best.source += ' (original upload)';
+      return best;
+    } catch { return null; }
+  };
+  for (let i = 0; i < ranked.length && results.length < MAX_CANDIDATES; i += 4) {
+    results.push(...(await Promise.all(ranked.slice(i, i + 4).map(fetchOne))).filter(Boolean));
   }
+  // bigger pictures first among pictures of the same rank
+  const sizeBonus = r => r.type !== 'image' ? 0 : Math.max(r.w || 0, r.h || 0) >= 2000 ? 20 : Math.max(r.w || 0, r.h || 0) >= 1000 ? 10 : 0;
+  results.sort((a, b) => (b.score + sizeBonus(b)) - (a.score + sizeBonus(a)));
+  results.splice(MAX_CANDIDATES);
+  for (const r of results) delete r.score;
   // the same artwork can turn up twice (inline and as a file)
   const seen = new Set();
   return {

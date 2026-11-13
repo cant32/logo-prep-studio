@@ -81,14 +81,61 @@ export async function pageSvg({ page, ops }) {
 
 // The whole page rendered to pixels (long side `size`), transparent where
 // the page is empty, trimmed to the artwork.
-export async function renderPage(page, size = 2000) {
+// Render the page's artwork so its longest side is `size` pixels. A quick
+// small render finds where the artwork sits; then only that area is drawn at
+// full resolution. (Drawing the whole page and trimming left a small logo on
+// an A4 letterhead at a few hundred pixels.)
+export async function renderPage(page, size = 2400) {
   const base = page.getViewport({ scale: 1 });
-  const vp = page.getViewport({ scale: size / Math.max(base.width, base.height) });
+  const draw = async (vp, w, h) => {   // used for the quick look only
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    await page.render({ canvasContext: x, viewport: vp, background: 'rgba(0,0,0,0)' }).promise;
+    return x.getImageData(0, 0, w, h);
+  };
+  // 1. where is the artwork?
+  const s0 = 800 / Math.max(base.width, base.height), vp0 = page.getViewport({ scale: s0 });
+  const small = await draw(vp0, Math.ceil(vp0.width), Math.ceil(vp0.height));
+  const box = inkBox(small);
+  if (!box) return trim(small);
+  // 2. just that area, a little margin round it, at full size
+  const m = 3;   // px at the small scale
+  const rx = Math.max(0, box.l - m) / s0, ry = Math.max(0, box.t - m) / s0;
+  const rw = Math.min(small.width, box.r + m + 1) / s0 - rx, rh = Math.min(small.height, box.b + m + 1) / s0 - ry;
+  let s1 = size / Math.max(rw, rh);
+  s1 = Math.min(s1, 16000 / Math.max(base.width, base.height) * 4);   // keep the maths sane on huge pages
+  return renderRegion(page, { x: rx, y: ry, w: rw, h: rh }, size);
+}
+
+// Draw one area of the page (in page units) so its longest side is `size`
+// pixels. The result remembers which area of the page it shows (`region`),
+// so a later crop can be re-drawn sharp from the PDF.
+export async function renderRegion(page, region, size = 2400) {
+  const base = page.getViewport({ scale: 1 });
+  const s1 = Math.min(size / Math.max(region.w, region.h), 64000 / Math.max(base.width, base.height));
+  const w = Math.max(1, Math.ceil(region.w * s1)), h = Math.max(1, Math.ceil(region.h * s1));
+  const vp = page.getViewport({ scale: s1, offsetX: -region.x * s1, offsetY: -region.y * s1 });
   const c = document.createElement('canvas');
-  c.width = Math.ceil(vp.width); c.height = Math.ceil(vp.height);
+  c.width = w; c.height = h;
   const x = c.getContext('2d', { willReadFrequently: true });
   await page.render({ canvasContext: x, viewport: vp, background: 'rgba(0,0,0,0)' }).promise;
-  return trim(x.getImageData(0, 0, c.width, c.height));
+  const out = trim(x.getImageData(0, 0, w, h));
+  const o = out.offset || { l: 0, t: 0 };
+  out.region = { x: region.x + o.l / s1, y: region.y + o.t / s1, w: out.width / s1, h: out.height / s1 };
+  return out;
+}
+
+// Bounding box of the non-empty (not transparent, not white) pixels.
+function inkBox(id) {
+  const { width: w, height: h, data: d } = id;
+  let l = w, t = h, r = -1, b = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = (y * w + x) * 4;
+    if (d[i + 3] < 10 || (d[i] > 248 && d[i + 1] > 248 && d[i + 2] > 248)) continue;
+    if (x < l) l = x; if (x > r) r = x; if (y < t) t = y; if (y > b) b = y;
+  }
+  return r < 0 ? null : { l, t, r, b };
 }
 
 // Crop away empty (transparent or white) margins, keeping a small border.
@@ -102,5 +149,7 @@ export function trim(id, pad = 8) {
   if (r < 0) return id;
   l = Math.max(0, l - pad); t = Math.max(0, t - pad); r = Math.min(w - 1, r + pad); b = Math.min(h - 1, b + pad);
   const c = new OffscreenCanvas(w, h); c.getContext('2d').putImageData(id, 0, 0);
-  return c.getContext('2d').getImageData(l, t, r - l + 1, b - t + 1);
+  const out = c.getContext('2d').getImageData(l, t, r - l + 1, b - t + 1);
+  out.offset = { l, t };
+  return out;
 }
